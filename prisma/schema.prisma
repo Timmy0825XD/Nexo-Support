@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Discord server configuration (multi-tenant by guild)
+model Guild {
+  id          String       @id
+  prefix      String       @default("[]")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  tournaments Tournament[]
+
+  @@map("guilds")
+}
+
+model Tournament {
+  id                       String              @id @default(cuid())
+  guildId                  String              @map("guild_id")
+  name                     String
+  challongeId              String              @map("challonge_id")
+  challongeKeyEncrypted    String              @map("challonge_key_encrypted")
+  sheetLink                String              @map("sheet_link")
+  adminRoleId              String              @map("admin_role_id")
+  helperRoleId             String              @map("helper_role_id")
+  attendanceChannelId      String              @map("attendance_channel_id")
+  transcriptChannelId      String              @map("transcript_channel_id")
+  rulesChannelId           String              @map("rules_channel_id")
+  deadlineChannelId        String              @map("deadline_channel_id")
+  resultChannelId          String?             @map("result_channel_id")
+  closedTicketCategoryId   String              @map("closed_ticket_category_id")
+  closeTicketCategory2Id   String?             @map("close_ticket_category_2_id")
+  ticketOpenCategory1Id    String              @map("ticket_open_category_1_id")
+  ticketOpenCategory2Id    String              @map("ticket_open_category_2_id")
+  ticketOpenCategory3Id    String?             @map("ticket_open_category_3_id")
+  ticketOpenCategory4Id    String?             @map("ticket_open_category_4_id")
+  schedulesChannelId       String?             @map("schedules_channel_id")
+  autoRoomEnabled          Boolean             @default(false) @map("auto_room_enabled")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  updatedAt                DateTime            @updatedAt @map("updated_at")
+  guild                    Guild               @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  matches                  Match[]
+  matchRooms               MatchRoom[]
+  attendance               Attendance[]
+  schedules                Schedule[]
+  bracketCorrections       BracketCorrection[]
+  participants             Participant[]
+
+  @@index([guildId])
+  @@map("tournaments")
+}
+
+model Match {
+  id               String              @id @default(cuid())
+  tournamentId     String              @map("tournament_id")
+  challongeMatchId String              @map("challonge_match_id")
+  round            String
+  group            String
+  team1Name        String              @map("team1_name")
+  team2Name        String              @map("team2_name")
+  team1Score       Int?                @map("team1_score")
+  team2Score       Int?                @map("team2_score")
+  winnerSide       Int?                @map("winner_side")
+  status           String              @default("pending")
+  ticketChannelId  String?             @map("ticket_channel_id")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  tournament       Tournament          @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matchRooms       MatchRoom[]
+  attendance       Attendance[]
+  schedules        Schedule[]
+  bracketCorrections BracketCorrection[]
+
+  @@index([tournamentId])
+  @@index([challongeMatchId])
+  @@index([ticketChannelId])
+  @@map("matches")
+}
+
+model MatchRoom {
+  id           String     @id @default(cuid())
+  tournamentId String     @map("tournament_id")
+  matchId      String     @map("match_id")
+  channelId    String     @map("channel_id")
+  categoryId   String     @map("category_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match        Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@index([channelId])
+  @@map("match_rooms")
+}
+
+model Attendance {
+  id                 String     @id @default(cuid())
+  tournamentId       String     @map("tournament_id")
+  matchId            String     @map("match_id")
+  ticketChannelId    String     @map("ticket_channel_id")
+  judgeDiscordId     String     @map("judge_discord_id")
+  recorderDiscordId  String     @map("recorder_discord_id")
+  team1Score         Int        @map("team1_score")
+  team2Score         Int        @map("team2_score")
+  remark             String?
+  recordingLink      String?    @map("recording_link")
+  deletedAt          DateTime?  @map("deleted_at")
+  deletedReason      String?    @map("deleted_reason")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+  tournament         Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match              Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@index([judgeDiscordId])
+  @@index([recorderDiscordId])
+  @@map("attendance")
+}
+
+model Schedule {
+  id                  String             @id @default(cuid())
+  tournamentId        String             @map("tournament_id")
+  matchId             String             @map("match_id")
+  ticketChannelId     String             @map("ticket_channel_id")
+  scheduledAt         DateTime           @map("scheduled_at")
+  schedulesMessageId  String?            @map("schedules_message_id")
+  ticketMessageId     String?            @map("ticket_message_id")
+  thumbnailUrl        String?            @map("thumbnail_url")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  tournament          Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match               Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  staffAssignments    StaffAssignment[]
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@index([ticketChannelId])
+  @@map("schedules")
+}
+
+model StaffAssignment {
+  id             String    @id @default(cuid())
+  scheduleId     String    @map("schedule_id")
+  role           String
+  discordUserId  String    @map("discord_user_id")
+  resignedAt     DateTime? @map("resigned_at")
+  resignReason   String?   @map("resign_reason")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  schedule       Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId])
+  @@index([discordUserId])
+  @@map("staff_assignments")
+}
+
+model BracketCorrection {
+  id                   String     @id @default(cuid())
+  tournamentId         String     @map("tournament_id")
+  matchId              String     @map("match_id")
+  oldTeam1Score        Int        @map("old_team1_score")
+  oldTeam2Score        Int        @map("old_team2_score")
+  newTeam1Score        Int        @map("new_team1_score")
+  newTeam2Score        Int        @map("new_team2_score")
+  correctedByDiscordId String     @map("corrected_by_discord_id")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  tournament           Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match                Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@map("bracket_corrections")
+}
+
+/// Optional cache synced from Google Sheets — not web registration
+model Participant {
+  id            String     @id @default(cuid())
+  tournamentId  String     @map("tournament_id")
+  teamName      String     @map("team_name")
+  discordTag    String     @map("discord_tag")
+  discordId     String     @map("discord_id")
+  inGameName    String     @map("in_game_name")
+  inGameId      String     @map("in_game_id")
+  currentTitle  String     @map("current_title")
+  seed          Int?
+  sheetRowIndex Int        @map("sheet_row_index")
+  source        String     @default("sheet")
+  syncedAt      DateTime   @map("synced_at")
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([discordId])
+  @@index([inGameId])
+  @@map("participants")
+}
