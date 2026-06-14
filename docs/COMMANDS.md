@@ -25,6 +25,11 @@ Esta spec **no incluye** registro web personalizado (`tournament registration op
 | Schedules | `schedules`, `staff_assignments` |
 | Teams / participants | Google Sheets + cache opcional `participants` |
 | Transcripts | Solo Discord — no DB |
+| Role management | Discord API (no DB) |
+| Server info / banlist | Discord API |
+| Ticket close / reopen / delete | `matches`, `match_rooms`, `guilds.closed_category_id` |
+| Staff recruit / fire | Discord roles + `guilds` (staff config) |
+| Staff work | `attendance`, `matches`, `tournaments` |
 
 ---
 
@@ -66,6 +71,20 @@ Esta spec **no incluye** registro web personalizado (`tournament registration op
 | [`/staff config set`](#staff-config-set) | Staff | Admin |
 | [`/staff config edit`](#staff-config-edit) | Staff | Admin |
 | [`/staff config view`](#staff-config-view) | Staff | Admin |
+| [`/staff fire`](#staff-fire) | Staff | Admin |
+| [`/staff recruit`](#staff-recruit) | Staff | Admin |
+| [`/staff work`](#staff-work) | Staff | Public |
+| [`/role user`](#role-user) | Role | Organiser |
+| [`/role add all`](#role-add-all) | Role | Organiser |
+| [`/role remove all`](#role-remove-all) | Role | Organiser |
+| [`/role list`](#role-list) | Role | Organiser |
+| [`/server info`](#server-info) | Server | Public |
+| [`/server banlist`](#server-banlist) | Server | Organiser |
+| [`/ticket close`](#ticket-close) | Ticket | Organiser |
+| [`/ticket reopen`](#ticket-reopen) | Ticket | Organiser |
+| [`/ticket delete`](#ticket-delete) | Ticket | Organiser |
+| [`/bot about`](#bot-about) | Bot | Public |
+| [`/bot help`](#bot-help) | Bot | Public |
 
 ### Convención de documentación {#convencion-documentacion}
 
@@ -1584,9 +1603,923 @@ Run Command → Validate Permissions → Load Staff Configuration
 
 ---
 
+### `/staff fire`
+
+**Description:** Remove one or more staff roles from a user based on the selected position.
+
+**Permissions:** Administrator only.
+
+**Restrictions:**
+
+- Only users with Discord Administrator permission can use this command
+- Target user must be a member of the server
+- Staff roles must be configured using `/staff config set`
+- Bot role must be higher than all removable staff roles
+
+**Purpose:** Remove staff positions, demote staff members, remove helper access, remove tournament administration roles, remove all staff permissions from a user.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| user | USER | Yes | Staff member to modify |
+| role | STRING (Choice) | Yes | Staff position to remove |
+
+**Choices — `role`:**
+
+| Choice | Roles removed |
+|---|---|
+| Judge | Judge role |
+| Recorder | Recorder role |
+| T1 Admin | T1 Admin role |
+| T2 Admin | T2 Admin role |
+| Best Staff | Best Staff role |
+| Server Helper | Server Helper role |
+| T1 Admin + Helper + Best Staff | T1 Admin, Server Helper, Best Staff roles |
+| T2 Admin + Helper + Best Staff | T2 Admin, Server Helper, Best Staff roles |
+| Complete | All configured staff roles (Staff, Judge, Recorder, T1/T2 Admin, Best Staff, Server Helper, Manager) |
+
+**Behavior:**
+
+- Loads staff configuration from `/staff config set`
+- Resolves role IDs for the selected position
+- Validates Discord role hierarchy (bot and executor)
+- Removes corresponding role(s) from the target user
+- Skips roles the user does not currently have
+
+**Workflow:**
+
+```text
+Run Command → Validate Administrator → Load Staff Config
+→ Resolve Position Roles → Validate Hierarchy → Remove Roles
+→ Send Confirmation Embed
+```
+
+**Validation:**
+
+- Staff configuration must exist
+- Bot role must be above all target roles
+- Discord hierarchy rules apply to every role removal
+
+**Success response:**
+
+```text
+✅ Staff role removal processed successfully.
+
+Staff Removal Updated
+
+@User staff role removal processed.
+
+Removed Position:
+Recorder
+
+Roles Removed:
+Recorder Role
+```
+
+**Database:** None — Discord role changes only. Role IDs sourced from `guilds` staff columns.
+
+**Features:** Staff demotion system, selective role removal, bulk staff role removal, complete staff removal option, role hierarchy validation.
+
+**Notes:** The `Complete` option removes every configured staff role from the selected user. Intended for staff demotions, removals, and restructuring.
+
+---
+
+### `/staff recruit`
+
+**Description:** Recruit a staff member by assigning a staff position and automatically sending a welcome message in the configured Staff Chat channel.
+
+**Permissions:** Administrator only.
+
+**Restrictions:**
+
+- Only users with Discord Administrator permission can use this command
+- Target user must be a member of the server
+- Staff roles must be configured using `/staff config set`
+- Bot role must be higher than all assignable staff roles
+- Staff Chat channel should be configured for welcome messages
+
+**Purpose:** Recruit new staff members, assign tournament positions, assign helper positions, assign administration positions, automatically onboard new staff members.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| user | USER | Yes | User to recruit |
+| role | STRING (Choice) | Yes | Staff position to assign |
+
+**Choices — `role`:**
+
+| Choice | Roles assigned |
+|---|---|
+| Judge | Judge role, Staff role |
+| Recorder | Recorder role, Staff role |
+| T1 Admin | T1 Admin role, Server Helper role, Staff role |
+| T2 Admin | T2 Admin role, Server Helper role, Staff role |
+| Best Staff | Best Staff role |
+| Server Helper | Server Helper role, Staff role |
+| Manager | Manager role, Staff role |
+
+**Behavior:**
+
+- Assigns corresponding role(s) from staff configuration
+- Detects and skips roles the user already has
+- Posts a welcome message in `staffchat_channel` (from `/staff config set`)
+- Welcome message includes assigned position and links to Announcements, Instructions, Details, and Event Rules channels
+
+**Welcome message example:**
+
+```text
+Welcome @User!
+
+You've been assigned as:
+Recorder
+
+Important Channels:
+
+• Announcements: #staff-announcements
+• Instructions: #staff-rules
+• Details Submission: #staff-info
+• Event Rules: #rules
+
+We're excited to have you on board!
+```
+
+**Workflow:**
+
+```text
+Run Command → Validate Administrator → Load Staff Config
+→ Resolve Position Roles → Validate Hierarchy → Assign Roles
+→ Post Staff Chat Welcome → Send Confirmation Embed
+```
+
+**Validation:**
+
+- Staff configuration must exist
+- Bot role must be above all assignable roles
+- Discord hierarchy rules apply
+
+**Success response:**
+
+```text
+✅ Staff recruitment processed successfully.
+
+Staff Recruitment Updated
+
+@User recruitment roles processed.
+
+Assigned Position:
+Recorder
+
+Roles Added:
+Recorder Role
+
+Notes:
+Already had Staff Role
+```
+
+**Database:** None — Discord role changes only. Channel IDs sourced from `guilds` staff columns.
+
+**Features:** Staff recruitment system, automatic role assignment, duplicate role detection, automatic onboarding message, Staff Chat integration.
+
+**Notes:** Existing roles are automatically detected and skipped. Welcome message channel links are pulled from staff configuration.
+
+---
+
+### `/staff work`
+
+**Description:** View staff work statistics for a tournament using attendance records collected through the attendance system.
+
+**Permissions:** Available to all users.
+
+**Restrictions:**
+
+- Tournament must exist
+- Attendance data must be available
+- Statistics are generated from attendance records
+- Results depend on attendance submissions and validations
+
+**Purpose:** Track staff activity, monitor Judge and Recorder performance, view staff workload distribution, evaluate staff contributions, support staff promotions and rewards.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| tournament | STRING (Autocomplete) | Yes | Tournament to generate statistics for |
+| include_default_wins | BOOLEAN | No | Include attendance from default wins (default: `False`) |
+
+**Behavior:**
+
+- Loads attendance records for the selected tournament from `attendance`
+- Joins match data for round grouping
+- When `include_default_wins = False`: excludes default wins, walkovers, byes, and automatic advancements
+- When `include_default_wins = True`: counts every attendance entry
+- Calculates match and round counts per staff member
+- Groups output into three sections: Judges only, Recorders only, Judge & Recorder (dual role)
+- Sorts staff by work count within each section
+
+**Workflow:**
+
+```text
+Run Command → Validate Tournament → Load Attendance Records
+→ Apply Default Win Filter → Calculate Judge/Recorder/Dual Stats
+→ Sort By Work Count → Generate Statistics Embed → Display Results
+```
+
+**Output sections:**
+
+| Section | Description |
+|---|---|
+| Judges | Staff who worked exclusively as Judges |
+| Recorders | Staff who worked exclusively as Recorders |
+| Judge & Recorder | Staff who worked in both positions |
+
+**Example output:**
+
+```text
+Judges
+rsshiro — 12 matches (4 rounds)
+abhay0248 — 11 matches (4 rounds)
+
+Recorders
+rhssamuel25 — 12 matches (5 rounds)
+jhoooon777 — 7 matches (2 rounds)
+
+Judge & Recorder
+rsshiro — 29 matches (12 rounds)
+nexwik. — 28 matches (16 rounds)
+```
+
+**Success response:**
+
+> ✅ Staff work statistics generated successfully.
+
+**Database:** `attendance`, `matches`, `tournaments`.
+
+**Features:** Tournament-specific statistics, Judge/Recorder/dual-role tracking, attendance integration, match and round count tracking, default win filtering.
+
+**Notes:** Statistics are generated entirely from attendance records collected through `/get attendance`. Useful for staff evaluations, promotions, rewards, and activity tracking.
+
+---
+
+## Role management
+
+Discord role utilities for organisers. No database persistence — all changes apply directly via the Discord API.
+
+> **Organiser role:** configured as `manager_role` via [`/staff config set`](#staff-config-set). Users with Discord Administrator permission may also run these commands.
+
+---
+
+### `/role user`
+
+**Description:** Add or remove a role from a specific user. If the user already has the role, the role will be removed. If the user does not have the role, the role will be added.
+
+**Permissions:** Organiser only.
+
+**Restrictions:**
+
+- Only users with the configured Organiser role can use this command
+- Bot role must be higher than the target role
+- User cannot manage roles equal to or higher than their highest role
+- Bot cannot manage administrator-managed roles above its role position
+- Target role must be assignable by the bot
+
+**Purpose:** Assign server roles, remove server roles, manage tournament roles, manage staff roles, manage event roles, quickly update member permissions.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| target | USER | Yes | User to modify |
+| role | ROLE | Yes | Role to add or remove |
+
+**Usage example:**
+
+```bash
+/role user target:@User role:@Helper
+```
+
+**Behavior:**
+
+- Validates Organiser permission and Discord role hierarchy
+- Checks if the target user already has the selected role
+- Adds the role if absent; removes the role if present (toggle)
+- Sends a result message confirming the action
+
+**Workflow:**
+
+```text
+Run Command → Validate Organiser → Validate Hierarchy
+→ Check Current Role State → Add or Remove Role → Send Result
+```
+
+**Validation failure responses:**
+
+- User hierarchy violation → `❌ You cannot manage roles higher than or equal to your highest role.`
+- Bot hierarchy violation → `❌ I cannot manage this role because it is higher than or equal to my highest role.`
+
+**Success responses:**
+
+- Role added → `✅ Role **{Role Name}** has been added to **{Username}**.`
+- Role removed → `✅ Role **{Role Name}** has been removed from **{Username}**.`
+
+**Features:** Role assignment system, role removal system, automatic role toggle, Discord role hierarchy validation, Organiser-only protection.
+
+**Notes:** Acts as a role toggle. Discord role hierarchy rules always apply. The bot's highest role must remain above all manageable roles.
+
+---
+
+### `/role add all`
+
+**Description:** Add a selected role to all eligible members in the server.
+
+**Permissions:** Organiser only.
+
+**Restrictions:**
+
+- Only users with the configured Organiser role can use this command
+- Bot role must be higher than the target role
+- Bot cannot assign roles higher than or equal to its highest role
+- Discord role hierarchy rules apply
+- Members who already have the role are skipped automatically
+
+**Purpose:** Mass role assignments, tournament role distribution, event role distribution, community role management, server-wide role updates.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| role | ROLE | Yes | The role to add to all eligible members |
+
+**Usage example:**
+
+```bash
+/role add all role:@English
+```
+
+**Behavior:**
+
+- Validates Organiser permission and role hierarchy
+- Scans all server members
+- Skips members who already have the role
+- Assigns the role to all eligible members
+- Sends completion statistics
+
+**Workflow:**
+
+```text
+Run Command → Validate Organiser → Validate Hierarchy
+→ Fetch All Members → Skip Existing → Bulk Assign → Send Statistics
+```
+
+**Validation failure response:**
+
+> ❌ I cannot assign this role because it is higher than or equal to my highest role.
+
+**Success response:**
+
+```text
+✅ Role assignment completed.
+
+Role: @English
+Added To: 742 members
+Skipped: 158 members (already had role)
+```
+
+**Features:** Server-wide role assignment, automatic duplicate checking, role hierarchy validation, Organiser-only protection, bulk member processing, progress tracking.
+
+**Notes:** Large servers may take longer to process. Members who already have the role are automatically skipped.
+
+---
+
+### `/role remove all`
+
+**Description:** Remove a selected role from all members who currently have that role.
+
+**Permissions:** Organiser only.
+
+**Restrictions:**
+
+- Only users with the configured Organiser role can use this command
+- Bot role must be higher than the target role
+- Bot cannot remove roles higher than or equal to its highest role
+- Discord role hierarchy rules apply
+- Members who do not have the selected role are skipped automatically
+
+**Purpose:** Mass role removal, event role cleanup, tournament role cleanup, community role management, server-wide role updates.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| role | ROLE | Yes | The role to remove from all members |
+
+**Usage example:**
+
+```bash
+/role remove all role:@MW Tournament Support
+```
+
+**Behavior:**
+
+- Validates Organiser permission and role hierarchy
+- Scans all server members
+- Skips members who do not have the role
+- Removes the role from all eligible members
+- Sends completion statistics
+
+**Workflow:**
+
+```text
+Run Command → Validate Organiser → Validate Hierarchy
+→ Fetch All Members → Filter Holders → Bulk Remove → Send Statistics
+```
+
+**Validation failure response:**
+
+> ❌ I cannot remove this role because it is higher than or equal to my highest role.
+
+**Success response:**
+
+```text
+✅ Role removal completed.
+
+Role: @MW Tournament Support
+Removed From: 125 members
+Skipped: 875 members (did not have role)
+```
+
+**Features:** Server-wide role removal, automatic member filtering, role hierarchy validation, Organiser-only protection, bulk member processing, progress tracking.
+
+**Notes:** This action cannot be undone automatically. Large servers may take longer to process.
+
+---
+
+### `/role list`
+
+**Description:** View detailed information about a specific role, including member counts, human users, bot users, and member lists.
+
+**Permissions:** Organiser only.
+
+**Restrictions:**
+
+- Only users with the configured Organiser role can use this command
+- The selected role must exist in the server
+- Large roles may generate a CSV file instead of displaying all members directly
+
+**Purpose:** View role statistics, audit role membership, verify tournament staff assignments, export role member lists, review server role distribution.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| role | ROLE | Yes | The role to retrieve information about |
+
+**Usage example:**
+
+```bash
+/role list role:@Server Head
+```
+
+**Behavior:**
+
+- Validates Organiser permission
+- Scans all members with the selected role
+- Calculates total, human, and bot member counts
+- Displays members inline in the embed when the list is small
+- Generates and attaches a CSV file when the member list exceeds the embed limit
+
+**Information displayed:**
+
+| Field | Description |
+|---|---|
+| Role Name | Name of the selected role |
+| Role ID | Discord snowflake ID |
+| Total Members | All members with the role |
+| Human Members | Non-bot members |
+| Bot Members | Bot accounts |
+
+**Small role example:**
+
+```text
+Role: Server Head
+
+Total Members: 1
+Human Members: 1
+Bot Members: 0
+
+Members:
+Timmy (@timmy_2507)
+```
+
+**Large role behavior:**
+
+- Generates CSV with columns: `Username`, `Display Name`, `User ID`, `Is Bot`
+- Attaches CSV to the response
+- Displays role statistics in the embed
+
+**Success responses:**
+
+- Inline display → `✅ Role information retrieved successfully.`
+- CSV export → `✅ Role information retrieved successfully.` + `📄 Member list exported as CSV.`
+
+**Features:** Role information display, member counting, human/bot separation, member list display, automatic CSV export for large roles, Organiser-only protection, role auditing support.
+
+**Notes:** CSV files are generated automatically when the member list becomes too large to display. Member counts are calculated in real time.
+
+---
+
+## Server
+
+Server information and moderation utilities. No database persistence — data retrieved from the Discord API.
+
+---
+
+### `/server info`
+
+**Description:** Display detailed information and statistics about the current Discord server.
+
+**Permissions:** Available to all users.
+
+**Restrictions:**
+
+- Command can only be used inside a server
+- Cannot be used in Direct Messages (DMs)
+
+**Purpose:** View server statistics, check member counts, view role statistics, view channel statistics, view emoji statistics, view boost information, view server creation information.
+
+**Options:** None.
+
+**Behavior:**
+
+- Retrieves current server information from Discord
+- Calculates member, role, channel, and emoji statistics in real time
+- Retrieves boost information, owner information, creation date, and server assets
+- Generates a structured information embed with server icon and banner (when available)
+
+**Information displayed:**
+
+| Section | Fields |
+|---|---|
+| Basic | Server name, Server ID, Server owner |
+| Members | Total members, Human members, Bot members |
+| Roles | Total roles |
+| Channels | Text channels, Voice channels, Categories |
+| Emojis | Total emojis, Animated emojis, Static emojis |
+| Boosts | Boost level, Boost count, Boosters |
+| Creation | Server creation date and timestamp |
+| Visual | Server icon, Server banner (if available) |
+
+**Example output:**
+
+```text
+Name: Liga Hispana
+ID: 1036107463516237925
+Owner: newvapety
+
+Total: 4842 | Humans: 4814 | Bots: 28
+Roles: 74
+Text: 120 | Voice: 8 | Categories: 30
+Emojis: 187 (39 animated, 148 static)
+Boost Level: 2 | Boost Count: 9 | Boosters: 5
+Created: Sun Oct 30 2022 04:41:09 GMT+0200
+```
+
+**Success response:**
+
+> ✅ Server information retrieved successfully.
+
+**Features:** Server information display, member statistics, role statistics, channel statistics, emoji statistics, boost statistics, server creation details, server icon and banner display.
+
+**Notes:** Statistics are generated in real time. Member counts separate humans and bots. Useful for server administration, audits, and general information lookup.
+
+---
+
+### `/server banlist`
+
+**Description:** View all banned users in the server and optionally export the ban list as an Excel spreadsheet.
+
+**Permissions:** Organiser only.
+
+**Restrictions:**
+
+- Only users with the configured Organiser role can use this command
+- Command can only be used inside a server
+- Cannot be used in Direct Messages (DMs)
+- Requires the bot to have permission to view bans
+
+**Purpose:** Review banned users, audit server moderation actions, export ban records, verify ban information, generate ban reports.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| excel | BOOLEAN | No | Export ban list as an Excel file (default: `False`) |
+
+**Usage examples:**
+
+```bash
+/server banlist
+/server banlist excel:True
+```
+
+**Behavior:**
+
+- Validates Organiser permission and ban viewing permission
+- Retrieves all banned users from Discord in real time
+- When `excel = False`: displays ban list directly in the channel (username and user ID)
+- When `excel = True`: generates and uploads an `.xlsx` file with columns `Username` and `User ID`
+
+**Inline display example:**
+
+```text
+Total banned users: 468
+
+remixprime (285208032806174730)
+xxxxxxxx6204 (361385003247992844)
+lord438 (381826416230268940)
+```
+
+**Excel export response:**
+
+```text
+📊 Total banned users: 468
+📄 Excel file generated successfully.
+```
+
+**Success responses:**
+
+- Inline → `✅ Ban list retrieved successfully.`
+- Excel → `✅ Ban list retrieved successfully.` + `📄 Excel file generated and uploaded successfully.`
+
+**Features:** Total banned user count, username and ID listing, Excel export support, ban record auditing, Organiser-only protection, real-time ban retrieval.
+
+**Notes:** Ban information is retrieved in real time from Discord. Useful for moderation audits, server management, and record keeping.
+
+---
+
+## Ticket management
+
+Match ticket channel lifecycle commands. Tickets are private match channels linked via `matches.ticket_channel_id` and `match_rooms`.
+
+> **Organiser role:** configured as `manager_role` via [`/staff config set`](#staff-config-set).
+
+---
+
+### `/ticket close`
+
+**Description:** Close the current match ticket and prevent further conversation until it is reopened.
+
+**Permissions:** Organiser only.
+
+**Restrictions:**
+
+- Command can only be used inside valid match ticket channels
+- Bot automatically denies usage outside match tickets
+- Only users with the configured Organiser role can use this command
+- Ticket must currently be open
+
+**Purpose:** Close completed match tickets, prevent further messages, mark tickets as inactive, prepare tickets for archiving or deletion.
+
+**Options:** None.
+
+**Behavior:**
+
+- Validates Organiser permission and match ticket channel context
+- Moves the channel to `closed_category_id` (from guild settings) when configured
+- Restricts messaging permissions for the ticket channel
+- Updates internal ticket status
+
+**Workflow:**
+
+```text
+Run Command → Validate Organiser → Validate Match Ticket Channel
+→ Verify Open Status → Close Ticket → Update Status → Send Confirmation
+```
+
+**Success response:**
+
+> ✅ Ticket closed successfully.
+
+**Database:** `matches`, `match_rooms` — ticket status read. Channel move uses `guilds.closed_category_id`.
+
+**Features:** Match ticket validation, Organiser-only protection, ticket status management, prevents accidental usage outside tickets.
+
+**Notes:** Only works inside match ticket channels. Closed tickets can be reopened using `/ticket reopen`.
+
+---
+
+### `/ticket reopen`
+
+**Description:** Reopen a previously closed match ticket and restore access to the channel.
+
+**Permissions:** Organiser only.
+
+**Restrictions:**
+
+- Command can only be used inside valid match ticket channels
+- Bot automatically denies usage outside match tickets
+- Only users with the configured Organiser role can use this command
+- Ticket must currently be closed
+
+**Purpose:** Reopen closed tickets, resume match discussions, restore ticket access, continue match management.
+
+**Options:** None.
+
+**Behavior:**
+
+- Validates Organiser permission and match ticket channel context
+- Verifies the ticket is currently closed
+- Restores channel access and messaging permissions
+- Moves the channel back to its original open category when known
+
+**Workflow:**
+
+```text
+Run Command → Validate Organiser → Validate Match Ticket Channel
+→ Verify Closed Status → Reopen Ticket → Restore Access → Send Confirmation
+```
+
+**Success response:**
+
+> ✅ Ticket reopened successfully.
+
+**Database:** `matches`, `match_rooms` — original category from `match_rooms.category_id`.
+
+**Features:** Match ticket validation, Organiser-only protection, ticket status restoration.
+
+**Notes:** Only closed tickets can be reopened. Reopened tickets can be closed again using `/ticket close`.
+
+---
+
+### `/ticket delete`
+
+**Description:** Permanently delete the current match ticket channel.
+
+**Permissions:** Organiser only.
+
+**Restrictions:**
+
+- Command can only be used inside valid match ticket channels
+- Bot automatically denies usage outside match tickets
+- Only users with the configured Organiser role can use this command
+
+**Purpose:** Remove completed match tickets, clean up unused ticket channels, maintain ticket category organization.
+
+**Options:** None.
+
+**Behavior:**
+
+- Validates Organiser permission and match ticket channel context
+- Deletes the ticket channel permanently
+- Clears `matches.ticket_channel_id` and related `match_rooms` records
+- Logs the action to `bot_logs` when configured
+
+**Workflow:**
+
+```text
+Run Command → Validate Organiser → Validate Match Ticket Channel
+→ Delete Channel → Clean Database Records → Log Action → Send Confirmation
+```
+
+**Success response:**
+
+> ✅ Ticket deleted successfully.
+
+**Database:** `matches` (`ticket_channel_id` cleared), `match_rooms` (record removed).
+
+**Features:** Match ticket validation, Organiser-only protection, permanent ticket removal.
+
+**Notes:** Deleted tickets cannot be recovered automatically. Use carefully.
+
+---
+
+## Bot
+
+General bot information and command reference.
+
+---
+
+### `/bot about`
+
+**Description:** Display detailed information, statistics, and runtime data about the bot.
+
+**Permissions:** Available to all users.
+
+**Restrictions:** Command can only be used inside a server.
+
+**Purpose:** View bot information, view bot statistics, check uptime, check memory usage, view version information, verify bot status.
+
+**Options:** None.
+
+**Behavior:**
+
+- Retrieves bot information and runtime statistics
+- Calculates global server and member counts across all guilds
+- Displays uptime since last bot start, memory usage, platform, Node.js version, and bot version
+- Shows a dynamic server header using the current guild name
+
+**Dynamic header example:**
+
+```text
+Created with 💖 for 『Liga Hispana』
+```
+
+**Information displayed:**
+
+| Section | Fields |
+|---|---|
+| Bot | Name, ID, Creation date |
+| Global | Total servers, Total members |
+| Runtime | Uptime, Memory usage |
+| System | Platform, Node.js version, Bot version |
+
+**Example output:**
+
+```text
+Created with 💖 for 『Liga Hispana』
+
+Name: Tourney Master
+ID: 1408470636195483840
+Created On: Fri Aug 22 2025
+
+Servers: 45
+Members: 103032
+
+Uptime: 7d 11h 35m 24s
+Memory Usage: 153.78 MB
+
+Platform: Linux
+Node: v24.16.0
+Bot Version: 1.0.0
+```
+
+**Success response:**
+
+> ✅ Bot information retrieved successfully.
+
+**Features:** Bot information display, runtime statistics, server statistics, member statistics, uptime tracking, memory usage monitoring, platform information, version information.
+
+**Notes:** Server count and member count are calculated globally. Uptime is calculated since the bot was last started. Memory usage is displayed in real time.
+
+---
+
+### `/bot help`
+
+**Description:** Display a categorized list of all available commands supported by the bot, including command descriptions and permission requirements.
+
+**Permissions:** Available to all users.
+
+**Restrictions:** Command can only be used inside a server.
+
+**Purpose:** Learn available commands, view command categories, check permission requirements, discover bot features, access quick command references.
+
+**Options:** None.
+
+**Behavior:**
+
+- Loads all registered slash commands
+- Groups commands into categories
+- Displays permission requirements per command
+- Generates one or more help embeds for browsing
+
+**Command categories:**
+
+| Category | Commands |
+|---|---|
+| 📋 Attendance | `/attendance mark`, `/attendance delete`, `/get attendance`, `/get sheet`, `/link add`, `/link delete`, `/link missing`, `/work_done` |
+| 📅 Schedule | `/schedule create`, `/schedule delete`, `/schedule update`, `/schedule unassigned`, `/schedule refresh`, `/schedule resign`, `/schedule show` |
+| 🏆 Result | `/result declare`, `/result delete` |
+| 👥 Role | `/role user`, `/role add all`, `/role remove all`, `/role list` |
+| 🌐 Server | `/server info`, `/server banlist` |
+| 🎫 Ticket | `/ticket close`, `/ticket reopen`, `/ticket delete` |
+| ⚙️ Settings | `/settings setup`, `/settings edit`, `/settings show` |
+| 👨‍💼 Staff | `/staff config set`, `/staff config edit`, `/staff config view`, `/staff recruit`, `/staff fire`, `/staff work` |
+| 🤖 Bot | `/bot about`, `/bot help` |
+
+**Permission indicators:**
+
+- ⚠️ Staff only
+- ⚠️ Organiser only
+- ⚠️ Administrator only
+- ⚠️ Judge only / Helper only (where applicable)
+
+**Success response:**
+
+> ✅ Command list generated successfully.
+
+**Features:** Categorized command list, permission indicators, command descriptions, tournament management commands, staff management commands, ticket management commands, attendance management commands, server management commands.
+
+**Notes:** Command availability depends on permissions and server configuration. Categories are automatically updated as new commands are added. Serves as the central documentation hub for all bot features.
+
+---
+
 ## Notas generales
 
 - Los comandos prefix (`[]command`) se documentarán en una fase posterior si aplican equivalentes a estos slash commands.
-- Permisos como **Admin** y **Organiser** se mapean a roles configurados en `/settings` y `/staff config`, o al permiso Discord Administrator en el primer setup.
+- Permisos como **Admin** se mapean al permiso Discord Administrator o al rol `admin_role` configurado en [`/settings setup`](#settings-setup).
+- Permisos **Organiser** se mapean al rol `manager_role` configurado en [`/staff config set`](#staff-config-set), salvo que el comando indique lo contrario.
+- Comandos de **Role**, **Server info** y **Server banlist** operan sobre la API de Discord; **Ticket** usa `matches` / `match_rooms` y la categoría cerrada en `guilds`.
+- **Staff fire** y **Staff recruit** requieren permiso Discord Administrator; **Staff work** lee `attendance` filtrado por torneo.
 - Referencias a Google Sheets y MW Ban Database son dependencias externas a validar contra la API en el diseño final.
 - Guild config commands (`/settings`, `/staff config`) follow the [documentation convention](#convencion-documentacion) and the setup/set → edit → show/view pattern. All command subsections are documented in English.

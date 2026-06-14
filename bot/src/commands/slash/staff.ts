@@ -1,28 +1,52 @@
 import { ZodError } from 'zod';
 import {
   ChannelType,
-  PermissionFlagsBits,
   SlashCommandBuilder,
   SlashCommandSubcommandBuilder,
 } from 'discord.js';
 import type { SlashCommand } from '../types.js';
+import { autocompleteTournaments } from '../../autocomplete/tournaments.js';
 import { ResourceValidationError, validateStaffResources } from '../../guards/discord-resources.js';
-import { PermissionError, assertAdmin } from '../../guards/permissions.js';
+import {
+  PermissionError,
+  assertAdmin,
+  assertDiscordAdministrator,
+} from '../../guards/permissions.js';
+import {
+  STAFF_FIRE_CHOICES,
+  STAFF_RECRUIT_CHOICES,
+  staffFirePositionSchema,
+  staffRecruitPositionSchema,
+} from '../../schemas/staff-positions.js';
 import { staffConfigEditSchema, staffConfigSetSchema } from '../../schemas/staff-config.js';
+import {
+  aggregateStaffWork,
+  fetchAttendanceForTournament,
+  formatStaffWorkSection,
+} from '../../services/attendance.js';
 import {
   getGuildConfig,
   isStaffConfigured,
   patchStaffConfig,
   upsertStaffConfig,
 } from '../../services/guilds.js';
-import { errorEmbed } from '../../utils/embeds.js';
+import {
+  applyStaffRoles,
+  buildStaffFireEmbed,
+  buildStaffRecruitEmbed,
+  resolveRolesForFire,
+  resolveRolesForRecruit,
+  sendStaffWelcomeMessage,
+} from '../../services/staff-hr.js';
+import { getTournamentByName } from '../../services/tournaments.js';
+import { errorEmbed, infoEmbed, successEmbed } from '../../utils/embeds.js';
 import {
   buildStaffEditEmbed,
   buildStaffSetEmbed,
   buildStaffShowEmbed,
 } from '../../utils/guild-display.js';
 import { parseStaffConfigEdit, parseStaffConfigSet } from '../../utils/parse-staff-options.js';
-import { logStaffConfigChange } from '../../services/guild-logs.js';
+import { logStaffConfigChange, logStaffRecruitment, logStaffRemoval } from '../../services/guild-logs.js';
 
 function staffConfigOptions(
   subcommand: SlashCommandSubcommandBuilder,
@@ -127,8 +151,8 @@ function staffConfigOptions(
 export const staffCommand: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName('staff')
-    .setDescription('Staff management configuration')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDescription('Staff management and configuration')
+    .setDefaultMemberPermissions(null)
     .addSubcommandGroup((group) =>
       group
         .setName('config')
@@ -150,11 +174,66 @@ export const staffCommand: SlashCommand = {
           ),
         )
         .addSubcommand((subcommand) =>
-          subcommand
-            .setName('view')
-            .setDescription('Display the current staff configuration'),
+          subcommand.setName('view').setDescription('Display the current staff configuration'),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('fire')
+        .setDescription('Remove staff roles from a user based on position')
+        .addUserOption((option) =>
+          option.setName('user').setDescription('Staff member to modify').setRequired(true),
+        )
+        .addStringOption((option) =>
+          option
+            .setName('role')
+            .setDescription('Staff position to remove')
+            .setRequired(true)
+            .addChoices(...STAFF_FIRE_CHOICES),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('recruit')
+        .setDescription('Recruit a staff member and assign a position')
+        .addUserOption((option) =>
+          option.setName('user').setDescription('User to recruit').setRequired(true),
+        )
+        .addStringOption((option) =>
+          option
+            .setName('role')
+            .setDescription('Staff position to assign')
+            .setRequired(true)
+            .addChoices(...STAFF_RECRUIT_CHOICES),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('work')
+        .setDescription('View staff work statistics for a tournament')
+        .addStringOption((option) =>
+          option
+            .setName('tournament')
+            .setDescription('Tournament to generate statistics for')
+            .setRequired(true)
+            .setAutocomplete(true),
+        )
+        .addBooleanOption((option) =>
+          option
+            .setName('include_default_wins')
+            .setDescription('Include attendance from default wins')
+            .setRequired(false),
         ),
     ),
+
+  async autocomplete(interaction, { supabase }) {
+    const subcommand = interaction.options.getSubcommand(false);
+    if (subcommand === 'work') {
+      await autocompleteTournaments(interaction, supabase);
+    } else {
+      await interaction.respond([]);
+    }
+  },
 
   async execute(interaction, { supabase }) {
     if (!interaction.inGuild() || !interaction.guild) {
@@ -164,98 +243,261 @@ export const staffCommand: SlashCommand = {
       return;
     }
 
-    const group = interaction.options.getSubcommandGroup(true);
+    const group = interaction.options.getSubcommandGroup(false);
     const subcommand = interaction.options.getSubcommand(true);
 
-    if (group !== 'config') return;
+    if (group === 'config') {
+      await interaction.deferReply();
 
-    await interaction.deferReply();
+      const guildConfig = await getGuildConfig(supabase, interaction.guild.id);
 
-    const guildConfig = await getGuildConfig(supabase, interaction.guild.id);
-
-    try {
-      assertAdmin(interaction, guildConfig);
-    } catch (error) {
-      const message =
-        error instanceof PermissionError
-          ? error.message
-          : 'You do not have permission to run this command.';
-      await interaction.editReply({ embeds: [errorEmbed('Permission Denied', message)] });
-      return;
-    }
-
-    try {
-      if (subcommand === 'view') {
-        const embed = buildStaffShowEmbed(
-          interaction.guild,
-          isStaffConfigured(guildConfig) ? guildConfig : null,
-        );
-        await interaction.editReply({ embeds: [embed] });
+      try {
+        assertAdmin(interaction, guildConfig);
+      } catch (error) {
+        const message =
+          error instanceof PermissionError
+            ? error.message
+            : 'You do not have permission to run this command.';
+        await interaction.editReply({ embeds: [errorEmbed('Permission Denied', message)] });
         return;
       }
 
-      if (subcommand === 'set') {
-        const parsed = parseStaffConfigSet(interaction);
-        const staff = staffConfigSetSchema.parse(parsed);
-        validateStaffResources(interaction.guild, staff);
-        const updated = await upsertStaffConfig(supabase, interaction.guild.id, staff);
-        await interaction.editReply({
-          embeds: [buildStaffSetEmbed(interaction.guild, updated)],
-        });
-        void logStaffConfigChange({
-          client: interaction.client,
-          guild: interaction.guild,
-          config: updated,
-          action: 'set',
-          triggeredBy: interaction.user,
-        });
-        return;
-      }
+      try {
+        if (subcommand === 'view') {
+          const embed = buildStaffShowEmbed(
+            interaction.guild,
+            isStaffConfigured(guildConfig) ? guildConfig : null,
+          );
+          await interaction.editReply({ embeds: [embed] });
+          return;
+        }
 
-      if (subcommand === 'edit') {
-        if (!isStaffConfigured(guildConfig)) {
+        if (subcommand === 'set') {
+          const parsed = parseStaffConfigSet(interaction);
+          const staff = staffConfigSetSchema.parse(parsed);
+          validateStaffResources(interaction.guild, staff);
+          const updated = await upsertStaffConfig(supabase, interaction.guild.id, staff);
           await interaction.editReply({
-            embeds: [
-              errorEmbed(
-                'Setup Required',
-                'No complete staff configuration found. Run `/staff config set` before editing.',
-              ),
-            ],
+            embeds: [buildStaffSetEmbed(interaction.guild, updated)],
+          });
+          void logStaffConfigChange({
+            client: interaction.client,
+            guild: interaction.guild,
+            config: updated,
+            action: 'set',
+            triggeredBy: interaction.user,
           });
           return;
         }
 
-        const parsed = parseStaffConfigEdit(interaction);
-        const changes = staffConfigEditSchema.parse(parsed);
-        validateStaffResources(interaction.guild, changes);
-        const updated = await patchStaffConfig(supabase, interaction.guild.id, changes);
-        const updatedAt = new Date(updated.updated_at).toUTCString();
-        await interaction.editReply({
-          embeds: [buildStaffEditEmbed(interaction.guild, changes, updatedAt)],
-        });
-        void logStaffConfigChange({
-          client: interaction.client,
-          guild: interaction.guild,
-          config: updated,
-          action: 'edit',
-          triggeredBy: interaction.user,
-          changes,
-        });
+        if (subcommand === 'edit') {
+          if (!isStaffConfigured(guildConfig)) {
+            await interaction.editReply({
+              embeds: [
+                errorEmbed(
+                  'Setup Required',
+                  'No complete staff configuration found. Run `/staff config set` before editing.',
+                ),
+              ],
+            });
+            return;
+          }
+
+          const parsed = parseStaffConfigEdit(interaction);
+          const changes = staffConfigEditSchema.parse(parsed);
+          validateStaffResources(interaction.guild, changes);
+          const updated = await patchStaffConfig(supabase, interaction.guild.id, changes);
+          const updatedAt = new Date(updated.updated_at).toUTCString();
+          await interaction.editReply({
+            embeds: [buildStaffEditEmbed(interaction.guild, changes, updatedAt)],
+          });
+          void logStaffConfigChange({
+            client: interaction.client,
+            guild: interaction.guild,
+            config: updated,
+            action: 'edit',
+            triggeredBy: interaction.user,
+            changes,
+          });
+        }
+      } catch (error) {
+        if (error instanceof ResourceValidationError) {
+          await interaction.editReply({ embeds: [errorEmbed('Validation Failed', error.message)] });
+          return;
+        }
+
+        if (error instanceof ZodError) {
+          await interaction.editReply({
+            embeds: [errorEmbed('Invalid Input', 'At least one staff setting must be provided.')],
+          });
+          return;
+        }
+
+        throw error;
       }
-    } catch (error) {
-      if (error instanceof ResourceValidationError) {
-        await interaction.editReply({ embeds: [errorEmbed('Validation Failed', error.message)] });
+
+      return;
+    }
+
+    await interaction.deferReply();
+    const guildConfig = await getGuildConfig(supabase, interaction.guild.id);
+
+    if (subcommand === 'fire' || subcommand === 'recruit') {
+      try {
+        assertDiscordAdministrator(interaction);
+      } catch (error) {
+        const message =
+          error instanceof PermissionError
+            ? error.message
+            : 'You do not have permission to run this command.';
+        await interaction.editReply({ embeds: [errorEmbed('Permission Denied', message)] });
         return;
       }
 
-      if (error instanceof ZodError) {
+      if (!isStaffConfigured(guildConfig)) {
         await interaction.editReply({
-          embeds: [errorEmbed('Invalid Input', 'At least one staff setting must be provided.')],
+          embeds: [
+            errorEmbed(
+              'Setup Required',
+              'Staff roles must be configured using `/staff config set` before using this command.',
+            ),
+          ],
         });
         return;
       }
 
-      throw error;
+      const executor = await interaction.guild.members.fetch(interaction.user.id);
+      const targetUser = interaction.options.getUser('user', true);
+      const targetMember = await interaction.guild.members.fetch(targetUser.id);
+
+      try {
+        if (subcommand === 'fire') {
+          const position = staffFirePositionSchema.parse(interaction.options.getString('role', true));
+          const roleIds = resolveRolesForFire(position, guildConfig!);
+          const result = await applyStaffRoles(
+            interaction.guild,
+            executor,
+            targetMember,
+            roleIds,
+            'remove',
+          );
+
+          await interaction.editReply({
+            embeds: [
+              successEmbed(
+                'Staff Removal Updated',
+                `✅ Staff role removal processed successfully.\n\n${buildStaffFireEmbed(interaction.guild, targetMember, position, result)}`,
+              ),
+            ],
+          });
+
+          if (guildConfig) {
+            void logStaffRemoval({
+              client: interaction.client,
+              guild: interaction.guild,
+              config: guildConfig,
+              triggeredBy: interaction.user,
+              target: targetMember,
+              position,
+              result,
+            });
+          }
+          return;
+        }
+
+        const position = staffRecruitPositionSchema.parse(
+          interaction.options.getString('role', true),
+        );
+        const roleIds = resolveRolesForRecruit(position, guildConfig!);
+        const result = await applyStaffRoles(
+          interaction.guild,
+          executor,
+          targetMember,
+          roleIds,
+          'add',
+        );
+
+        await sendStaffWelcomeMessage(interaction.guild, guildConfig!, targetMember, position);
+
+        await interaction.editReply({
+          embeds: [
+            successEmbed(
+              'Staff Recruitment Updated',
+              `✅ Staff recruitment processed successfully.\n\n${buildStaffRecruitEmbed(interaction.guild, targetMember, position, result)}`,
+            ),
+          ],
+        });
+
+        if (guildConfig) {
+          void logStaffRecruitment({
+            client: interaction.client,
+            guild: interaction.guild,
+            config: guildConfig,
+            triggeredBy: interaction.user,
+            target: targetMember,
+            position,
+            result,
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to update staff roles.';
+        await interaction.editReply({ embeds: [errorEmbed('Staff Error', message)] });
+      }
+
+      return;
+    }
+
+    if (subcommand === 'work') {
+      const tournamentName = interaction.options.getString('tournament', true);
+      const includeDefaultWins =
+        interaction.options.getBoolean('include_default_wins') ?? false;
+
+      const tournament = await getTournamentByName(
+        supabase,
+        interaction.guild.id,
+        tournamentName,
+      );
+
+      if (!tournament) {
+        await interaction.editReply({
+          embeds: [errorEmbed('Tournament Not Found', 'The selected tournament does not exist.')],
+        });
+        return;
+      }
+
+      await interaction.guild.members.fetch();
+      const records = await fetchAttendanceForTournament(
+        supabase,
+        tournament.id,
+        includeDefaultWins,
+      );
+
+      if (records.length === 0) {
+        await interaction.editReply({
+          embeds: [
+            infoEmbed(
+              'Staff Work Statistics',
+              `✅ Staff work statistics generated successfully.\n\nNo attendance records found for **${tournament.name}**.`,
+            ),
+          ],
+        });
+        return;
+      }
+
+      const stats = aggregateStaffWork(records);
+      const description = [
+        '✅ Staff work statistics generated successfully.',
+        '',
+        formatStaffWorkSection(interaction.guild, 'Judges', stats.judges),
+        '',
+        formatStaffWorkSection(interaction.guild, 'Recorders', stats.recorders),
+        '',
+        formatStaffWorkSection(interaction.guild, 'Judge & Recorder', stats.dual),
+      ].join('\n');
+
+      await interaction.editReply({
+        embeds: [infoEmbed(`Staff Work — ${tournament.name}`, description.slice(0, 4096))],
+      });
     }
   },
 };

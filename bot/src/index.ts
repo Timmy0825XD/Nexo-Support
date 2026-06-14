@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
+import './utils/uptime.js';
 import { loadPrefixCommands, loadSlashCommands } from './commands/loader.js';
 import type { PrefixCommand, SlashCommand } from './commands/types.js';
 import { initSupabase } from './services/supabase.js';
@@ -24,6 +25,7 @@ const supabase = initSupabase(supabaseUrl, supabaseServiceRoleKey);
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],

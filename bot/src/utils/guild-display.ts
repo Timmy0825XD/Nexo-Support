@@ -1,26 +1,57 @@
-import { EmbedBuilder, type Guild } from 'discord.js';
+import { EmbedBuilder, type Guild, type GuildMember, type Role, type User } from 'discord.js';
 import { CUSTOM_EMOJIS, EMBED_COLORS } from '../constants/emojis.js';
 import type { GuildSettingsEdit } from '../schemas/guild-settings.js';
 import type { StaffConfigEdit } from '../schemas/staff-config.js';
 import type { GuildRow } from '../types/guild.js';
 import { embedField, successEmbed } from './embeds.js';
 
+export const NOT_CONFIGURED = '`Not configured`';
+export const DELETED_ROLE = '❌ Deleted Role';
+export const DELETED_CHANNEL = '❌ Deleted Channel';
+export const DELETED_CATEGORY = '❌ Deleted Category';
+export const UNKNOWN_MEMBER = '❌ Unknown Member';
+
 export function formatRole(guild: Guild, roleId: string | null | undefined): string {
-  if (!roleId) return '`Not configured`';
+  if (!roleId) return NOT_CONFIGURED;
   const role = guild.roles.cache.get(roleId);
-  return role ? `<@&${role.id}>` : '❌ Deleted Role';
+  return role ? formatRoleFromRole(role) : DELETED_ROLE;
+}
+
+export function formatRoleFromRole(role: Role | null | undefined): string {
+  if (!role) return DELETED_ROLE;
+  return `<@&${role.id}>`;
 }
 
 export function formatChannel(guild: Guild, channelId: string | null | undefined): string {
-  if (!channelId) return '`Not configured`';
+  if (!channelId) return NOT_CONFIGURED;
   const channel = guild.channels.cache.get(channelId);
-  return channel ? `<#${channel.id}>` : '❌ Deleted Channel';
+  return channel ? `<#${channel.id}>` : DELETED_CHANNEL;
 }
 
 export function formatCategory(guild: Guild, categoryId: string | null | undefined): string {
-  if (!categoryId) return '`Not configured`';
+  if (!categoryId) return NOT_CONFIGURED;
   const category = guild.channels.cache.get(categoryId);
-  return category ? category.name : '❌ Deleted Channel';
+  return category ? `<#${category.id}>` : DELETED_CATEGORY;
+}
+
+export function formatUser(userId: string | null | undefined): string {
+  if (!userId) return NOT_CONFIGURED;
+  return `<@${userId}>`;
+}
+
+export function formatUserFromUser(user: User | null | undefined): string {
+  if (!user) return NOT_CONFIGURED;
+  return `<@${user.id}>`;
+}
+
+export function formatMember(member: GuildMember | null | undefined): string {
+  if (!member) return UNKNOWN_MEMBER;
+  return `<@${member.id}>`;
+}
+
+export function formatRoleList(guild: Guild, roleIds: string[]): string {
+  if (roleIds.length === 0) return 'None';
+  return roleIds.map((roleId) => formatRole(guild, roleId)).join(', ');
 }
 
 export function buildSettingsShowEmbed(guild: Guild, config: GuildRow | null) {
