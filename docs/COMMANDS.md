@@ -4,6 +4,7 @@ Referencia de todos los slash commands del bot. Este documento se amplía durant
 
 > **Arquitectura:** bot monolítico (`bot/`) — fuente de verdad para implementación.  
 > **Idioma del bot:** inglés (nombres, descripciones y respuestas en Discord).  
+> **Idioma de las specs:** todo el contenido bajo cada `### /comando` (Description, Purpose, Options, Behavior, Validation, Success response, Notes, etc.) va en **inglés**. El texto explicativo entre secciones (intro, convención, notas) puede estar en español.  
 > **Estado:** lista inicial — algunos comandos pueden cambiar antes de implementarse.
 
 ### Fuera de alcance
@@ -16,6 +17,9 @@ Esta spec **no incluye** registro web personalizado (`tournament registration op
 |---|---|
 | Attendance, links, work | `attendance` ([`DATABASE.md`](./DATABASE.md)) |
 | Tournament config | `tournaments`, `guilds` |
+| Guild settings | `guilds` |
+| Staff config | `guilds` |
+| Audit logs (guild) | `guilds` → canales `bot_logs` / `challonge_logs` |
 | Rooms / auto-room | `matches`, `match_rooms` |
 | Scores / bracket fix | `matches`, `bracket_corrections` + Challonge API |
 | Schedules | `schedules`, `staff_assignments` |
@@ -56,6 +60,34 @@ Esta spec **no incluye** registro web personalizado (`tournament registration op
 | [`/schedule unassigned`](#schedule-unassigned) | Schedule | Staff |
 | [`/schedule refresh`](#schedule-refresh) | Schedule | Staff |
 | [`/schedule resign`](#schedule-resign) | Schedule | Assigned staff |
+| [`/settings setup`](#settings-setup) | Settings | Admin |
+| [`/settings edit`](#settings-edit) | Settings | Admin |
+| [`/settings show`](#settings-show) | Settings | Admin |
+| [`/staff config set`](#staff-config-set) | Staff | Admin |
+| [`/staff config edit`](#staff-config-edit) | Staff | Admin |
+| [`/staff config view`](#staff-config-view) | Staff | Admin |
+
+### Convención de documentación {#convencion-documentacion}
+
+Cada comando incluye, según aplique, las mismas secciones en este orden:
+
+| Sección | Contenido |
+|---|---|
+| **Description** | What the command does (English — matches Discord) |
+| **Permissions** | Who can run it |
+| **Purpose** | Why it exists and when to use it |
+| **Prerequisite** | Prior requirements (e.g. setup before edit) |
+| **Options** | Table: `Name` · `Type` · `Required` · `Description` |
+| **Behavior** | What the bot does on execution |
+| **Workflow** | Internal step-by-step flow |
+| **Validation** | Input and permission rules |
+| **Audit logging** | Log channel used (guild config write commands) |
+| **Success response** | Embed or message shown to the user |
+| **Database** | Tables and columns affected |
+| **Features** | Related capabilities |
+| **Notes** | Operational clarifications |
+
+Guild configuration groups follow **setup/set** (full) → **edit** (partial) → **show/view** (read-only). All subsections under each command heading are written in English.
 
 ---
 
@@ -1026,8 +1058,535 @@ haideptrai9061 vs Souelkady | The Brave Sailor Season 3 | 2026-05-21 15:00 UTC
 
 ---
 
+## Settings
+
+Server-wide configuration (`guilds` table): bot admin role, log channels, transcript archive, and thumbnail publication. Does **not** replace per-tournament config in `tournaments` (`/tournament add|edit`).
+
+| Command | Usage |
+|---|---|
+| `/settings setup` | **Initial full setup** — 5 required fields |
+| `/settings edit` | **Partial update** — only provided fields |
+| `/settings show` | View current configuration (read-only) |
+
+**Field ownership (guild):**
+
+| Area | Fields | Command |
+|---|---|---|
+| Admin and global logging | `admin_role`, `challonge_logs`, `transcript_logs`, `bot_logs`, `thumbnail_channel` | `/settings` |
+| Staff and schedules | operational roles, `challonge_mod`, `schedule_channel`, staff channels | [`/staff config`](#staff-config-set) |
+
+**Log channels:**
+
+| Option | Bot usage |
+|---|---|
+| `bot_logs` | Bot events, config changes, moderation, tickets |
+| `challonge_logs` | Bracket and Challonge actions |
+| `transcript_logs` | Ticket transcript HTML files (not audit logs) |
+
+Audit logs use structured **embeds** in English (`Triggered By`, `UTC Time`, event fields).
+
+---
+
+### `/settings setup`
+
+**Description:** Configure all global bot settings required for logging, transcripts, thumbnails, and server-wide admin permissions.
+
+**Permissions:** Admin only.
+
+**Purpose:** Define the server-wide configuration on **first setup** — admin role, log channels, transcript archive, and thumbnail publication.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| admin_role | ROLE | Yes | Tournament organiser/admin role for bot commands |
+| challonge_logs | CHANNEL | Yes | Channel where Challonge actions and bracket changes are logged |
+| transcript_logs | CHANNEL | Yes | Channel used to archive ticket transcripts |
+| bot_logs | CHANNEL | Yes | Channel used for bot events, errors, and moderation logs |
+| thumbnail_channel | CHANNEL | Yes | Channel used to publish generated schedule thumbnails |
+
+**Behavior:**
+
+- Saves the **complete** settings configuration into the database
+- Creates the guild row if it does not exist yet
+- Overwrites all settings fields in a single operation; does **not** modify staff columns
+- Validates all roles and channels belong to the current server
+- Verifies bot channel permissions before saving
+- Refreshes the internal configuration cache
+- Applies changes immediately to dependent modules
+
+**Workflow:**
+
+```text
+Run Command → Validate Permissions → Validate Roles → Validate Channels
+→ Verify Bot Access → Save Configuration → Refresh Internal Cache
+→ Apply Changes → Post Audit Log → Send Success Embed
+```
+
+**Validation:**
+
+- All five options are required
+- All roles must belong to the current server
+- All channels must belong to the current server
+- Bot must have: View Channel, Send Messages, Embed Links on log channels
+- Bot must have: View Channel, Send Messages, Embed Links, Attach Files on `thumbnail_channel`
+
+**Audit logging:** Posts a structured embed to `bot_logs` on success. Failures to send the log do not affect the command result.
+
+**Success response:**
+
+```text
+✅ Bot settings updated successfully.
+
+👑 Admin Role: @Organizer
+📋 Challonge Logs: #logs-challonge
+📜 Transcript Logs: #logs-server
+🤖 Bot Logs: #tourney-master-bot-logs
+🖼️ Thumbnail Channel: #thumbnail
+```
+
+**Database:** `guilds` — fields updated: `admin_role_id`, `challonge_logs_channel_id`, `transcript_logs_channel_id`, `bot_logs_channel_id`, `thumbnail_channel_id`.
+
+**Features:** Centralized bot configuration, logging channel setup, transcript automation support, thumbnail publishing support, runtime configuration refresh, audit logging, multi-tournament compatibility.
+
+**Notes:** Run once when onboarding a new server. For subsequent changes, use `/settings edit`.
+
+---
+
+### `/settings edit`
+
+**Description:** Edit the existing bot configuration for the server without resetting unaffected settings.
+
+**Permissions:** Admin only.
+
+**Purpose:** Update specific settings fields **after initial setup** while preserving all other configured values.
+
+**Prerequisite:** Server must be fully configured via `/settings setup`. If not, the bot directs the user to run setup first.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| admin_role | ROLE | No | Tournament organiser/admin role for bot commands |
+| challonge_logs | CHANNEL | No | Channel where Challonge actions and bracket changes are logged |
+| transcript_logs | CHANNEL | No | Channel used to archive ticket transcripts |
+| bot_logs | CHANNEL | No | Channel used for bot events, errors, and moderation logs |
+| thumbnail_channel | CHANNEL | No | Channel used to publish generated schedule thumbnails |
+
+**Behavior:**
+
+- Loads the current server configuration
+- Updates **only** provided fields
+- Leaves all unspecified settings unchanged; does **not** modify staff columns
+- Validates provided roles and channels
+- Verifies bot channel permissions before saving
+- Refreshes the internal configuration cache
+- Applies changes immediately to dependent modules
+
+**Workflow:**
+
+```text
+Run Command → Validate Permissions → Load Current Settings
+→ Validate Provided Values → Verify Bot Access → Save Configuration
+→ Refresh Internal Cache → Apply Changes → Post Audit Log → Send Success Embed
+```
+
+**Validation:**
+
+- At least one option must be provided
+- All roles must belong to the current server
+- All channels must belong to the current server
+- Bot must have required permissions on each provided channel (same rules as setup)
+
+**Audit logging:** Posts a structured embed to `bot_logs` listing modified fields. Failures to send the log do not affect the command result.
+
+**Partial update examples:**
+
+```bash
+/settings edit bot_logs:#tourney-master-bot-logs
+/settings edit thumbnail_channel:#thumbnail
+```
+
+**Success response:**
+
+```text
+✅ Settings Updated Successfully
+
+Modified Settings:
+
+🤖 Bot Logs
+#tourney-master-bot-logs
+
+🕒 Updated At:
+2026-06-13 22:35 UTC
+```
+
+**Database:** `guilds` — fields potentially updated: same as `/settings setup`.
+
+**Features:** Partial configuration updates, channel migration support, runtime configuration refresh, audit logging, validation system, zero-downtime configuration changes.
+
+**Notes:** Prefer this command over re-running setup to avoid overwriting unrelated fields.
+
+---
+
+### `/settings show`
+
+**Description:** Display the current global bot configuration for the server.
+
+**Permissions:** Admin only.
+
+**Purpose:** Verify settings completeness, troubleshoot configuration issues, and review active log channels without modifying any values.
+
+**Options:** None.
+
+**Behavior:**
+
+- Loads the current server configuration from the database
+- Retrieves all configured roles and channels
+- Validates whether configured resources still exist in Discord
+- Displays the configuration in a structured embed
+- Highlights missing, deleted, or inaccessible resources
+- Does not modify any settings
+
+**Workflow:**
+
+```text
+Run Command → Validate Permissions → Load Guild Configuration
+→ Fetch Roles → Fetch Channels → Validate Resources
+→ Generate Settings Embed → Display Current Configuration
+```
+
+**Information displayed:**
+
+| Section | Fields |
+|---|---|
+| Roles | Admin |
+| Logging channels | Challonge logs, Transcript logs, Bot logs |
+| Publication | Thumbnail channel |
+
+**Example output:**
+
+```text
+⚙️ Current Bot Settings
+
+👑 Admin Role
+@Organizer
+
+📋 Challonge Logs
+#logs-challonge
+
+📜 Transcript Logs
+#logs-server
+
+🤖 Bot Logs Channel
+#tourney-master-bot-logs
+
+🖼️ Thumbnail Channel
+#thumbnail
+```
+
+**Validation display:**
+
+- Deleted role → `❌ Deleted Role`
+- Deleted channel → `❌ Deleted Channel`
+- No configuration → `⚠️ No configuration found. Use /settings setup to configure the bot before using tournament commands.`
+
+**Database:** `guilds` — fields read: same as `/settings setup`.
+
+**Features:** Configuration overview, setup validation, missing resource detection, logging channel verification, read-only operation, troubleshooting support.
+
+**Notes:** Staff roles and schedule channel are shown via `/staff config view`, not here.
+
+---
+
+## Staff
+
+Staff hierarchy, operational roles, and internal channels (`guilds` table). Complements [`/settings`](#settings-setup) with tier roles, Challonge moderator, schedule channel, and staff communication channels.
+
+| Command | Usage |
+|---|---|
+| `/staff config set` | **Initial full setup** — 15 required fields |
+| `/staff config edit` | **Partial update** — only provided fields |
+| `/staff config view` | View current staff configuration (read-only) |
+
+> Requires `bot_logs` from `/settings setup` for staff change audit logs.
+
+---
+
+### `/staff config set`
+
+**Description:** Configure all staff management roles and channels used by the bot for tournament administration, internal communication, staff coordination, announcements, and scheduling.
+
+**Permissions:** Admin only.
+
+**Purpose:** Define the staff hierarchy, operational roles, schedule channel, and communication channels on **first setup**.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| staff_role | ROLE | Yes | Main tournament staff role |
+| judge_role | ROLE | Yes | Judge role used for match assignments |
+| recorder_role | ROLE | Yes | Recorder role used for match recordings |
+| t1_admin_role | ROLE | Yes | Tier 1 tournament administrator role |
+| t2_admin_role | ROLE | Yes | Tier 2 tournament administrator role |
+| best_staff_role | ROLE | Yes | Recognition role for outstanding staff members |
+| server_helper_role | ROLE | Yes | General helper/support staff role |
+| manager_role | ROLE | Yes | Staff management role |
+| challonge_mod | ROLE | Yes | Staff role allowed to manage Challonge-related actions |
+| schedule_channel | CHANNEL | Yes | Channel used for schedule announcements |
+| staffchat_channel | CHANNEL | Yes | Main staff communication channel |
+| staff_announcement_channel | CHANNEL | Yes | Staff announcements channel |
+| staff_instructions_channel | CHANNEL | Yes | Staff instructions and guidelines channel |
+| staff_details_channel | CHANNEL | Yes | Staff information and documentation channel |
+| event_rules_channel | CHANNEL | Yes | Event rules and procedures channel |
+
+**Behavior:**
+
+- Saves the **complete** staff configuration into the database
+- Creates the guild row if it does not exist yet
+- Overwrites all staff fields in a single operation; does **not** modify settings columns
+- Validates all roles and channels belong to the current server
+- Verifies bot channel permissions before saving
+- Refreshes the internal configuration cache
+- Applies changes immediately to staff-related commands and guards
+
+**Workflow:**
+
+```text
+Run Command → Validate Permissions → Validate Roles → Validate Channels
+→ Verify Bot Access → Save Configuration → Refresh Internal Cache
+→ Apply Changes → Post Audit Log → Send Success Embed
+```
+
+**Validation:**
+
+- All fifteen options are required
+- All roles must belong to the current server
+- All channels must belong to the current server
+- Bot must have: View Channel, Send Messages, Embed Links on all staff channels
+
+**Audit logging:** Posts a structured embed to `bot_logs` (from `/settings setup`) on success. Failures to send the log do not affect the command result.
+
+**Success response:**
+
+```text
+✅ Staff Configuration Updated Successfully
+
+👑 Manager Role: @Organizer
+⚙️ Staff Role: @Staff
+⚖️ Judge Role: @Judge
+🎥 Recorder Role: @Recorder
+🏆 T1 Admin: @T1 Admin
+🥈 T2 Admin: @T2 Admin
+⭐ Best Staff: @Best Staff
+🛠️ Server Helper: @Helper
+🏆 Challonge Role: @Bracket Admin
+📅 Schedule Channel: #calendario-schedules
+💬 Staff Chat: #staff-chat
+📢 Announcements: #staff-announcements
+📖 Instructions: #staff-rules
+📋 Details: #staff-info
+📜 Event Rules: #rules
+```
+
+**Database:** `guilds` — fields updated: `staff_role_id`, `judge_role_id`, `recorder_role_id`, `t1_admin_role_id`, `t2_admin_role_id`, `best_staff_role_id`, `server_helper_role_id`, `manager_role_id`, `challonge_mod_role_id`, `schedule_channel_id`, `staff_chat_channel_id`, `staff_announcement_channel_id`, `staff_instructions_channel_id`, `staff_details_channel_id`, `event_rules_channel_id`.
+
+**Features:** Centralized staff configuration, staff hierarchy management, schedule channel setup, internal communication setup, runtime configuration refresh, permission validation, audit logging, multi-tournament support.
+
+**Notes:** Run once when onboarding staff configuration. For subsequent changes, use `/staff config edit`.
+
+---
+
+### `/staff config edit`
+
+**Description:** Edit the existing staff configuration for the server without resetting unaffected settings.
+
+**Permissions:** Admin only.
+
+**Purpose:** Update specific staff roles or channels **after initial setup** while preserving all other configured values.
+
+**Prerequisite:** Staff must be fully configured via `/staff config set`. If not, the bot directs the user to run set first.
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| staff_role | ROLE | No | Main tournament staff role |
+| judge_role | ROLE | No | Judge role used for match assignments |
+| recorder_role | ROLE | No | Recorder role used for match recordings |
+| t1_admin_role | ROLE | No | Tier 1 tournament administrator role |
+| t2_admin_role | ROLE | No | Tier 2 tournament administrator role |
+| best_staff_role | ROLE | No | Recognition role for outstanding staff members |
+| server_helper_role | ROLE | No | General helper/support staff role |
+| manager_role | ROLE | No | Staff management role |
+| challonge_mod | ROLE | No | Staff role allowed to manage Challonge-related actions |
+| schedule_channel | CHANNEL | No | Channel used for schedule announcements |
+| staffchat_channel | CHANNEL | No | Main staff communication channel |
+| staff_announcement_channel | CHANNEL | No | Staff announcements channel |
+| staff_instructions_channel | CHANNEL | No | Staff instructions and guidelines channel |
+| staff_details_channel | CHANNEL | No | Staff information and documentation channel |
+| event_rules_channel | CHANNEL | No | Event rules and procedures channel |
+
+**Behavior:**
+
+- Loads the current staff configuration
+- Updates **only** provided fields
+- Leaves all unspecified settings unchanged; does **not** modify settings columns
+- Validates provided roles and channels
+- Verifies bot channel permissions before saving
+- Refreshes the internal configuration cache
+- Applies changes immediately to staff-related commands and guards
+
+**Workflow:**
+
+```text
+Run Command → Validate Permissions → Load Current Settings
+→ Validate Provided Values → Verify Bot Access → Save Configuration
+→ Refresh Internal Cache → Apply Changes → Post Audit Log → Send Success Embed
+```
+
+**Validation:**
+
+- At least one option must be provided
+- All roles must belong to the current server
+- All channels must belong to the current server
+- Bot must have: View Channel, Send Messages, Embed Links on each provided channel
+
+**Audit logging:** Posts a structured embed to `bot_logs` listing modified fields. Failures to send the log do not affect the command result.
+
+**Partial update examples:**
+
+```bash
+/staff config edit judge_role:@Judge recorder_role:@Recorder
+/staff config edit schedule_channel:#schedules
+/staff config edit challonge_mod:@BracketAdmin
+```
+
+**Success response:**
+
+```text
+✅ Staff Configuration Updated Successfully
+
+Modified Settings:
+
+⚖️ Judge Role
+@Judge
+
+🕒 Updated At:
+2026-06-13 22:35 UTC
+```
+
+**Database:** `guilds` — fields potentially updated: same as `/staff config set`.
+
+**Features:** Partial configuration updates, dynamic role reassignment, channel migration support, runtime configuration refresh, audit logging, validation system, zero-downtime configuration changes.
+
+**Notes:** Prefer this command over re-running set to avoid overwriting unrelated fields.
+
+---
+
+### `/staff config view`
+
+**Description:** Display the current staff management configuration for the server.
+
+**Permissions:** Admin only.
+
+**Purpose:** Review and verify the staff setup without modifying any configuration.
+
+**Options:** None.
+
+**Behavior:**
+
+- Loads the current staff configuration from the database
+- Retrieves all configured roles and channels
+- Validates whether configured resources still exist in Discord
+- Displays the information in a structured embed
+- Highlights missing, deleted, or inaccessible resources
+- Does not modify any settings
+
+**Workflow:**
+
+```text
+Run Command → Validate Permissions → Load Staff Configuration
+→ Fetch Roles → Fetch Channels → Validate Resources
+→ Generate Configuration Embed → Display Configuration
+```
+
+**Information displayed:**
+
+| Section | Fields |
+|---|---|
+| Staff roles | Manager, Staff, Judge, Recorder, T1 Admin, T2 Admin, Best Staff, Server Helper, Challonge mod |
+| Staff channels | Schedule, Staff Chat, Announcements, Instructions, Details, Event Rules |
+
+**Example output:**
+
+```text
+🏅 Staff Configuration
+
+👑 Manager Role
+@Organizer
+
+⚙️ Staff Role
+@Staff
+
+⚖️ Judge Role
+@Judge
+
+🎥 Recorder Role
+@Recorder
+
+🏆 T1 Admin
+@T1 Admin
+
+🥈 T2 Admin
+@T2 Admin
+
+⭐ Best Staff
+@Best Staff
+
+🛠️ Server Helper
+@Helper
+
+🏆 Challonge Role
+@Bracket Admin
+
+📅 Schedule Channel
+#calendario-schedules
+
+💬 Staff Chat
+#staff-chat
+
+📢 Announcements
+#staff-announcements
+
+📖 Instructions
+#staff-rules
+
+📋 Details
+#staff-info
+
+📜 Event Rules
+#rules
+```
+
+**Validation display:**
+
+- Deleted role → `❌ Deleted Role`
+- Deleted channel → `❌ Deleted Channel`
+- No configuration → `⚠️ No staff configuration found. Use /staff config set to configure the staff system.`
+
+**Database:** `guilds` — fields read: same as `/staff config set`.
+
+**Features:** Configuration overview, resource validation, missing role/channel detection, staff hierarchy inspection, read-only operation, troubleshooting support.
+
+**Notes:** Global log channels and admin role are shown via `/settings show`, not here.
+
+---
+
 ## Notas generales
 
 - Los comandos prefix (`[]command`) se documentarán en una fase posterior si aplican equivalentes a estos slash commands.
-- Permisos como **Admin** y **Organiser** se mapearán a los roles del proyecto (Organizer, Helper, etc.) durante la implementación.
+- Permisos como **Admin** y **Organiser** se mapean a roles configurados en `/settings` y `/staff config`, o al permiso Discord Administrator en el primer setup.
 - Referencias a Google Sheets y MW Ban Database son dependencias externas a validar contra la API en el diseño final.
+- Guild config commands (`/settings`, `/staff config`) follow the [documentation convention](#convencion-documentacion) and the setup/set → edit → show/view pattern. All command subsections are documented in English.

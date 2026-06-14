@@ -50,11 +50,39 @@ Configuración por servidor Discord (multi-tenant).
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | `TEXT` PK | Discord guild ID |
-| `prefix` | `TEXT` | Prefijo de comandos (default `[]`) |
+| `prefix` | `TEXT` | Prefijo de comandos (default `_`) |
+| `admin_role_id` | `TEXT` | Rol admin del bot — `/settings *` |
+| `challonge_mod_role_id` | `TEXT` | Rol moderación Challonge — `/staff config *` |
+| `challonge_logs_channel_id` | `TEXT` | Logs de bracket/Challonge — `/settings *` |
+| `transcript_logs_channel_id` | `TEXT` | Archivo de transcripts — `/settings *` |
+| `closed_category_id` | `TEXT` | *(legacy, no expuesto en comandos)* |
+| `schedule_channel_id` | `TEXT` | Anuncios de schedules — `/staff config *` |
+| `results_channel_id` | `TEXT` | *(legacy, no expuesto en comandos)* |
+| `bot_logs_channel_id` | `TEXT` | Logs del bot — `/settings *` |
+| `thumbnail_channel_id` | `TEXT` | Thumbnails de schedules — `/settings *` |
+| `staff_role_id` | `TEXT` | Staff general — `/staff config *` |
+| `judge_role_id` | `TEXT` | Jueces |
+| `recorder_role_id` | `TEXT` | Recorders |
+| `t1_admin_role_id` | `TEXT` | Admin tier 1 |
+| `t2_admin_role_id` | `TEXT` | Admin tier 2 |
+| `best_staff_role_id` | `TEXT` | Reconocimiento staff |
+| `server_helper_role_id` | `TEXT` | Helpers del servidor |
+| `manager_role_id` | `TEXT` | Gestión de staff |
+| `staff_chat_channel_id` | `TEXT` | Chat interno staff |
+| `staff_announcement_channel_id` | `TEXT` | Anuncios staff |
+| `staff_instructions_channel_id` | `TEXT` | Instrucciones staff |
+| `staff_details_channel_id` | `TEXT` | Info/documentación staff |
+| `event_rules_channel_id` | `TEXT` | Reglas del evento |
 | `created_at` | `TIMESTAMPTZ` | |
 | `updated_at` | `TIMESTAMPTZ` | |
 
-**Comandos:** settings, multi-servidor global.
+**Notas:**
+
+- Roles operativos (`staff`, `judge`, `recorder`), `challonge_mod_role_id` y `schedule_channel_id` viven en columnas staff — `/staff config *`.
+- `closed_category_id` y `results_channel_id` permanecen en schema por compatibilidad; categoría cerrada y resultados se configuran por torneo en `tournaments`.
+- Columnas nullable: permite configurar `/settings` y `/staff config` de forma independiente.
+
+**Comandos:** `/settings setup|edit|show`, `/staff config set|edit|view`, multi-servidor global.
 
 ---
 

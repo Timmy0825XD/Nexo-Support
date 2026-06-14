@@ -74,6 +74,7 @@ src/services/
 ├── sheets.ts
 ├── challonge.ts
 ├── transcripts.ts
+├── guild-logs.ts        # Audit embeds → bot_logs / challonge_logs channels
 └── encryption.ts      # Challonge key encrypt/decrypt
 ```
 
