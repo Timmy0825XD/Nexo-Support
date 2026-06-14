@@ -3,7 +3,7 @@ import { LOG_COLORS } from '../constants/log-colors.js';
 import type { GuildSettingsEdit } from '../schemas/guild-settings.js';
 import type { StaffConfigEdit } from '../schemas/staff-config.js';
 import { embedField } from './embeds.js';
-import { formatChannel, formatRole } from './guild-display.js';
+import { formatChannel, formatRole, formatUserFromUser } from './guild-display.js';
 
 const SETTINGS_FIELD_LABELS: Record<keyof GuildSettingsEdit, string> = {
   admin_role_id: 'Admin Role',
@@ -31,8 +31,9 @@ const STAFF_FIELD_LABELS: Record<keyof StaffConfigEdit, string> = {
   event_rules_channel_id: 'Event Rules',
 };
 
+
 function formatUser(user: User): string {
-  return `${user} (\`${user.id}\`)`;
+  return formatUserFromUser(user);
 }
 
 function formatSettingsValue(guild: Guild, key: keyof GuildSettingsEdit, value: string): string {

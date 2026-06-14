@@ -1,0 +1,55 @@
+-- Manual seed for ticket command testing in development.
+-- Replace placeholder IDs with real Discord snowflakes from your test guild.
+
+-- Example usage:
+-- 1. Create a text channel in an open ticket category
+-- 2. Insert a tournament (or use an existing one)
+-- 3. Insert a match linked to that channel
+-- 4. Insert a match_rooms row
+
+-- INSERT INTO tournaments (
+--   id, guild_id, name, challonge_id, challonge_key_encrypted, sheet_link,
+--   admin_role_id, helper_role_id, attendance_channel_id, transcript_channel_id,
+--   rules_channel_id, deadline_channel_id, closed_ticket_category_id,
+--   ticket_open_category_1_id, ticket_open_category_2_id
+-- ) VALUES (
+--   'test_tournament_1',
+--   'YOUR_GUILD_ID',
+--   'Test Tournament',
+--   'test_challonge',
+--   'encrypted_key_placeholder',
+--   'https://docs.google.com/spreadsheets/d/example',
+--   'ADMIN_ROLE_ID',
+--   'HELPER_ROLE_ID',
+--   'ATTENDANCE_CHANNEL_ID',
+--   'TRANSCRIPT_CHANNEL_ID',
+--   'RULES_CHANNEL_ID',
+--   'DEADLINE_CHANNEL_ID',
+--   'CLOSED_CATEGORY_ID',
+--   'OPEN_CATEGORY_1_ID',
+--   'OPEN_CATEGORY_2_ID'
+-- );
+
+-- INSERT INTO matches (
+--   id, tournament_id, challonge_match_id, round, "group",
+--   team1_name, team2_name, ticket_channel_id
+-- ) VALUES (
+--   'test_match_1',
+--   'test_tournament_1',
+--   '12345',
+--   '1',
+--   'A',
+--   'Team Alpha',
+--   'Team Beta',
+--   'TICKET_CHANNEL_ID'
+-- );
+
+-- INSERT INTO match_rooms (
+--   id, tournament_id, match_id, channel_id, category_id
+-- ) VALUES (
+--   'test_room_1',
+--   'test_tournament_1',
+--   'test_match_1',
+--   'TICKET_CHANNEL_ID',
+--   'OPEN_CATEGORY_1_ID'
+-- );
