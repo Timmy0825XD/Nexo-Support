@@ -42,22 +42,20 @@ for (const command of loadPrefixCommands()) {
 
 const commandContext = { supabase };
 
-client.once(Events.ClientReady, async (readyClient) => {
-  console.log(`Bot logged in as ${readyClient.user.tag}`);
-
+async function syncSlashCommands(): Promise<void> {
   const commandData = loadSlashCommands().map((cmd) => cmd.data.toJSON());
   const devGuildId = process.env.DISCORD_GUILD_ID;
 
-  try {
-    await registerSlashCommands({
-      token,
-      clientId,
-      guildId: devGuildId,
-      commands: commandData,
-    });
-  } catch (error) {
-    console.error('Failed to register slash commands:', error);
-  }
+  await registerSlashCommands({
+    token,
+    clientId,
+    guildId: devGuildId,
+    commands: commandData,
+  });
+}
+
+client.once(Events.ClientReady, (readyClient) => {
+  console.log(`Bot logged in as ${readyClient.user.tag}`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -91,9 +89,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const message = 'Something went wrong while executing this command.';
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: message, ephemeral: true });
+      await interaction.followUp({ content: message });
     } else {
-      await interaction.reply({ content: message, ephemeral: true });
+      await interaction.reply({ content: message });
     }
   }
 });
@@ -119,4 +117,10 @@ client.on(Events.MessageCreate, async (message) => {
   }
 });
 
-client.login(token);
+try {
+  await syncSlashCommands();
+  await client.login(token);
+} catch (error) {
+  console.error('Failed to start bot:', error);
+  process.exit(1);
+}

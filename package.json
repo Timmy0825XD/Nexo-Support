@@ -7,6 +7,8 @@
     "start": "cd bot && bun run start",
     "lint": "cd bot && bun run lint",
     "db:push": "cd bot && bun run db:push",
-    "db:migrate": "cd bot && bun run db:migrate"
+    "db:migrate": "cd bot && bun run db:migrate",
+    "commands:sync": "cd bot && bun run commands:sync",
+    "commands:clear": "cd bot && bun run commands:clear"
   }
 }
