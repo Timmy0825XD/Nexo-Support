@@ -5,6 +5,7 @@ import {
   type TextChannel,
 } from 'discord.js';
 import type { GuildRow } from '../types/guild.js';
+import { getMatchByChallongeMatchIdForGuild } from './matches.js';
 
 export interface MatchRoomRow {
   id: string;
@@ -32,6 +33,74 @@ export class TicketError extends Error {
     super(message);
     this.name = 'TicketError';
   }
+}
+
+const TICKET_TOPIC_PREFIX = 'nexo:';
+
+export function buildTicketTopic(challongeMatchId: string): string {
+  return `Match ID: ${challongeMatchId}`;
+}
+
+export function parseChallongeMatchIdFromTopic(topic: string | null | undefined): string | null {
+  if (!topic?.trim()) return null;
+
+  const labeledMatch = topic.match(/Match ID:\s*(\d+)/i);
+  if (labeledMatch?.[1]) return labeledMatch[1];
+
+  const prefixedMatch = topic.match(/(?:^|;)match_id=(\d+)/i);
+  if (prefixedMatch?.[1]) return prefixedMatch[1];
+
+  if (topic.startsWith(TICKET_TOPIC_PREFIX)) {
+    const legacyMatch = topic.match(/match_id=([0-9a-f-]{36})/i);
+    if (legacyMatch?.[1] && !/^\d+$/.test(legacyMatch[1])) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export interface ResolvedTicketContext {
+  tournamentId: string;
+  matchId: string;
+  challongeMatchId: string;
+}
+
+export async function resolveTicketFromChannel(
+  supabase: SupabaseClient,
+  guildId: string,
+  channel: TextChannel,
+  guildConfig: GuildRow | null,
+): Promise<ResolvedTicketContext | null> {
+  const ticketContext = await findTicketByChannel(supabase, guildId, channel.id, guildConfig);
+  if (ticketContext) {
+    const { data, error } = await supabase
+      .from('matches')
+      .select('id, challonge_match_id, tournament_id')
+      .eq('id', ticketContext.match.id)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    const match = data as { id: string; challonge_match_id: string; tournament_id: string };
+    return {
+      tournamentId: match.tournament_id,
+      matchId: match.id,
+      challongeMatchId: match.challonge_match_id,
+    };
+  }
+
+  const challongeMatchId = parseChallongeMatchIdFromTopic(channel.topic);
+  if (!challongeMatchId) return null;
+
+  const resolved = await getMatchByChallongeMatchIdForGuild(supabase, guildId, challongeMatchId);
+  if (!resolved) return null;
+
+  return {
+    tournamentId: resolved.tournamentId,
+    matchId: resolved.match.id,
+    challongeMatchId: resolved.match.challonge_match_id,
+  };
 }
 
 export async function findTicketByChannel(
@@ -190,4 +259,24 @@ export async function getTicketChannel(
   const channel = await guild.channels.fetch(channelId);
   if (!channel || channel.type !== ChannelType.GuildText) return null;
   return channel as TextChannel;
+}
+
+function stripStatusPrefix(channelName: string): string {
+  return channelName.replace(/^[✅🔴]+/u, '');
+}
+
+export async function finalizeMatchTicket(params: {
+  guild: Guild;
+  channel: TextChannel;
+  closedCategoryId: string;
+}): Promise<TextChannel> {
+  const baseName = stripStatusPrefix(params.channel.name);
+  const completedName = `✅${baseName}`.slice(0, 100);
+
+  if (params.channel.name !== completedName) {
+    await params.channel.setName(completedName, 'Match completed');
+  }
+
+  await closeTicketChannel(params.guild, params.channel, params.closedCategoryId);
+  return params.channel;
 }

@@ -11,12 +11,20 @@ import {
   buildStaffConfigLogEmbed,
 } from '../utils/log-embeds.js';
 import {
+  formatCompactScoreLine,
+  formatEmphasizedName,
+  formatMatchScoreBlock,
+  formatMatchupTitle,
+} from '../utils/match-formatting.js';
+import {
   formatChannel,
   formatMember,
   formatRoleFromRole,
   formatRoleList,
   formatUserFromUser,
 } from '../utils/guild-display.js';
+import type { TournamentEdit } from '../schemas/tournament.js';
+import type { TournamentRow } from '../types/tournament.js';
 import type { StaffRoleChangeResult } from './staff-hr.js';
 import type { BulkRoleResult } from './roles.js';
 
@@ -292,6 +300,251 @@ export async function logTicketDeleted(params: {
       triggeredByField(params.triggeredBy),
     ],
     color: LOG_COLORS.danger,
+  });
+}
+
+export async function logTournamentCreated(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournament: TournamentRow;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Tournament Registered',
+    fields: [
+      { name: 'Tournament', value: params.tournament.name, inline: true },
+      { name: 'Tournament ID', value: params.tournament.id, inline: true },
+      { name: 'Challonge ID', value: params.tournament.challonge_id, inline: true },
+      triggeredByField(params.triggeredBy),
+      {
+        name: 'Auto Room',
+        value: params.tournament.auto_room_enabled ? 'Enabled' : 'Disabled',
+        inline: true,
+      },
+    ],
+    color: LOG_COLORS.config,
+  });
+
+  await logChallongeEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Tournament Linked to Challonge',
+    fields: [
+      { name: 'Tournament', value: params.tournament.name, inline: true },
+      { name: 'Challonge ID', value: params.tournament.challonge_id, inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+  });
+}
+
+export async function logTournamentUpdated(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournament: TournamentRow;
+  changes: TournamentEdit & { challonge_key?: string };
+}): Promise<void> {
+  const changedFields = Object.keys(params.changes)
+    .filter((key) => params.changes[key as keyof typeof params.changes] !== undefined)
+    .join(', ');
+
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Tournament Updated',
+    fields: [
+      { name: 'Tournament', value: params.tournament.name, inline: true },
+      { name: 'Tournament ID', value: params.tournament.id, inline: true },
+      triggeredByField(params.triggeredBy),
+      { name: 'Changed Fields', value: changedFields || 'None listed', inline: false },
+    ],
+    color: LOG_COLORS.config,
+  });
+
+  if (params.changes.challonge_key) {
+    await logChallongeEvent({
+      client: params.client,
+      guild: params.guild,
+      config: params.config,
+      title: 'Tournament Challonge Credentials Updated',
+      fields: [
+        { name: 'Tournament', value: params.tournament.name, inline: true },
+        { name: 'Challonge ID', value: params.tournament.challonge_id, inline: true },
+        triggeredByField(params.triggeredBy),
+      ],
+    });
+  }
+}
+
+export async function logTournamentDeleted(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournament: TournamentRow;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Tournament Deleted',
+    fields: [
+      { name: 'Tournament', value: params.tournament.name, inline: true },
+      { name: 'Tournament ID', value: params.tournament.id, inline: true },
+      { name: 'Challonge ID', value: params.tournament.challonge_id, inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: LOG_COLORS.danger,
+  });
+}
+
+export async function logRoomsCreated(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournament: TournamentRow;
+  result: {
+    created: Array<{ channelId: string; channelName: string; matchId: string }>;
+  };
+}): Promise<void> {
+  const roomLines = params.result.created
+    .map((room) => `${formatChannel(params.guild, room.channelId)} (${room.channelName})`)
+    .join('\n');
+
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Match Rooms Created',
+    fields: [
+      { name: 'Tournament', value: params.tournament.name, inline: true },
+      { name: 'Rooms Created', value: String(params.result.created.length), inline: true },
+      triggeredByField(params.triggeredBy),
+      { name: 'Channels', value: roomLines || 'None', inline: false },
+    ],
+    color: LOG_COLORS.config,
+  });
+}
+
+export async function logAutoRoomToggled(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournament: TournamentRow;
+  enabled: boolean;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: params.enabled ? 'Auto Room Enabled' : 'Auto Room Disabled',
+    fields: [
+      { name: 'Tournament', value: params.tournament.name, inline: true },
+      { name: 'Tournament ID', value: params.tournament.id, inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: params.enabled ? LOG_COLORS.config : LOG_COLORS.danger,
+  });
+}
+
+export async function logScoreUploaded(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournament: TournamentRow;
+  team1Name: string;
+  team2Name: string;
+  winnerSide: 1 | 2;
+  score1: number;
+  score2: number;
+  note?: string | null;
+}): Promise<void> {
+  const fields = [
+    { name: 'Torneo', value: formatEmphasizedName(params.tournament.name), inline: true },
+    {
+      name: 'Partido',
+      value: formatMatchupTitle(params.team1Name, params.team2Name),
+      inline: false,
+    },
+    {
+      name: 'Marcador',
+      value: formatMatchScoreBlock({
+        team1Name: params.team1Name,
+        team2Name: params.team2Name,
+        score1: params.score1,
+        score2: params.score2,
+        winnerSide: params.winnerSide,
+      }),
+      inline: false,
+    },
+    {
+      name: 'Resumen',
+      value: formatCompactScoreLine({
+        team1Name: params.team1Name,
+        team2Name: params.team2Name,
+        score1: params.score1,
+        score2: params.score2,
+      }),
+      inline: false,
+    },
+    triggeredByField(params.triggeredBy),
+  ];
+
+  if (params.note?.trim()) {
+    fields.push({ name: 'Nota', value: `*${params.note.trim()}*`, inline: false });
+  }
+
+  await logChallongeEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Score Uploaded',
+    fields,
+  });
+}
+
+export async function logBracketCorrected(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournament: TournamentRow;
+  matchLabel: string;
+  oldScore1: number | null;
+  oldScore2: number | null;
+  newScore1: number;
+  newScore2: number;
+}): Promise<void> {
+  await logChallongeEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Bracket Score Corrected',
+    fields: [
+      { name: 'Tournament', value: params.tournament.name, inline: true },
+      { name: 'Match', value: params.matchLabel, inline: false },
+      {
+        name: 'Old Score',
+        value: `${params.oldScore1 ?? '?'} - ${params.oldScore2 ?? '?'}`,
+        inline: true,
+      },
+      {
+        name: 'New Score',
+        value: `${params.newScore1} - ${params.newScore2}`,
+        inline: true,
+      },
+      triggeredByField(params.triggeredBy),
+    ],
   });
 }
 
