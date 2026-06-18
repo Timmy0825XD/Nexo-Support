@@ -1,4 +1,7 @@
-import type { SlashCommandSubcommandsOnlyBuilder } from 'discord.js';
+import type {
+  SlashCommandOptionsOnlyBuilder,
+  SlashCommandSubcommandsOnlyBuilder,
+} from 'discord.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface CommandContext {
@@ -8,7 +11,8 @@ export interface CommandContext {
 export interface SlashCommand {
   data:
     | import('discord.js').SlashCommandBuilder
-    | SlashCommandSubcommandsOnlyBuilder;
+    | SlashCommandSubcommandsOnlyBuilder
+    | SlashCommandOptionsOnlyBuilder;
   execute: (
     interaction: import('discord.js').ChatInputCommandInteraction,
     context: CommandContext,

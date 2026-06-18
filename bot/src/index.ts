@@ -5,6 +5,7 @@ import { loadPrefixCommands, loadSlashCommands } from './commands/loader.js';
 import type { PrefixCommand, SlashCommand } from './commands/types.js';
 import { initSupabase } from './services/supabase.js';
 import { registerSlashCommands } from './services/register-commands.js';
+import { startAutoRoomWorker } from './workers/auto-room.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -58,6 +59,7 @@ async function syncSlashCommands(): Promise<void> {
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Bot logged in as ${readyClient.user.tag}`);
+  startAutoRoomWorker(client, supabase);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -65,7 +67,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const command = slashCommands.get(interaction.commandName);
 
     if (!command?.autocomplete) {
-      await interaction.respond([]);
+      if (!interaction.responded) {
+        await interaction.respond([]).catch(() => undefined);
+      }
       return;
     }
 
@@ -73,7 +77,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await command.autocomplete(interaction, commandContext);
     } catch (error) {
       console.error(`Autocomplete failed for /${interaction.commandName}:`, error);
-      await interaction.respond([]);
+      if (!interaction.responded) {
+        await interaction.respond([]).catch(() => undefined);
+      }
     }
 
     return;
