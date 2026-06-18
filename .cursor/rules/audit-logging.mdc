@@ -1,0 +1,46 @@
+---
+description: Audit logging for state-changing bot commands
+globs: bot/**/*.ts
+alwaysApply: false
+---
+
+# Audit logging
+
+Commands that **mutate server state** must write an audit log after a successful operation. Read-only / informational commands must **not** log.
+
+## Log channels (from `/settings setup`)
+
+| Target | Config key | Use for |
+|---|---|---|
+| `bot_logs` | `bot_logs_channel_id` | Roles, staff, tickets, permissions, general bot actions |
+| `challonge_logs` | `challonge_logs_channel_id` | Bracket/score/Challonge operations |
+
+Use helpers in `bot/src/services/guild-logs.ts`. Never throw from logging — failures are console-only.
+
+## Must log (mutations)
+
+- Settings/staff **setup, edit, set** → `logSettingsChange`, `logStaffConfigChange`
+- Staff **recruit, fire** → `logStaffRecruitment`, `logStaffRemoval`
+- Role **user, add all, remove all** → `logRoleUserChange`, `logBulkRoleChange`
+- Ticket **close, reopen, delete** → `logTicketClosed`, `logTicketReopened`, `logTicketDeleted`
+- Future: attendance mark/delete, tournament add/edit/delete, schedule changes, score uploads → `logBotEvent` or domain helper + `logChallongeEvent` when Challonge-related
+
+## Must NOT log (read-only)
+
+- `/bot about`, `/bot help`, `/ping`
+- `/settings show`, `/staff config view`, `/staff work`
+- `/server info`, `/server banlist` (list/export only)
+- `/role list`
+
+## Implementation pattern
+
+```typescript
+// After successful mutation + user reply:
+if (guildConfig) {
+  void logStaffRecruitment({ client, guild, config: guildConfig, triggeredBy: interaction.user, ... });
+}
+```
+
+- Call logging **after** the command succeeds, with `void` (fire-and-forget).
+- Include **Triggered By**, affected users/channels/roles using `guild-display` formatters.
+- Prefer dedicated helpers over raw `logBotEvent` when one exists.

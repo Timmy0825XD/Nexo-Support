@@ -1,0 +1,106 @@
+---
+description: Git workflow (commits, push, PR) — activate ONLY when the user says "Cursor Git"
+alwaysApply: false
+---
+
+# Cursor Git
+
+**Activation:** Follow this rule **only** when the user explicitly says **"Cursor Git"** (case-insensitive).  
+Do **not** commit, push, branch, or open PRs unless that phrase was used in the current request.
+
+Outside "Cursor Git", keep the default: no git writes unless the user asks directly.
+
+---
+
+## Workflow overview
+
+1. Inspect repo state (`git status`, `git diff`, `git log`, branch vs remote).
+2. Split changes into **logical commits** — one commit per feature/fix/concern, not one giant commit.
+3. Commit each group with an English imperative message (see below).
+4. Push if needed (`-u origin HEAD` on new branches).
+5. Open PR with `gh pr create` when the user wants it (or when "Cursor Git" implies publish).
+
+Reference: [`docs/GITFLOW.md`](docs/GITFLOW.md).
+
+---
+
+## Branching
+
+| Type | Pattern | Base |
+|---|---|---|
+| Feature | `feature/<short-description>` | `develop` |
+| Hotfix | `hotfix/<short-description>` | `main` |
+
+Create/switch branch before committing if current branch is wrong for the work.
+
+---
+
+## Commits
+
+- **Language:** English, imperative mood.
+- **Format:** `type(scope): summary` — types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
+- **Grouping:** Files that belong to the same feature/fix go in one commit. Unrelated changes → separate commits.
+- **Never commit:** `.env`, credentials, secrets.
+- **Message via HEREDOC:**
+
+```bash
+git commit -m "$(cat <<'EOF'
+feat(bot): add paginated help command
+
+EOF
+)"
+```
+
+### Git safety (mandatory)
+
+- Never update git config, force-push `main`/`master`, or skip hooks unless the user explicitly asks.
+- Never `--amend` unless HEAD was created by you in this session, not pushed, and user asked or hook auto-modified files.
+- If a hook fails, fix and create a **new** commit — do not amend a failed commit.
+- Do not push unless the user asked (via "Cursor Git" or explicit push request).
+
+### Per commit sequence
+
+1. `git status` + `git diff` (understand what will be committed).
+2. `git add` only files for **this** logical group.
+3. `git commit` with HEREDOC message.
+4. `git status` to verify.
+5. Repeat for the next group until the working tree is clean (or only intentional untracked files remain).
+
+---
+
+## Pull requests
+
+Use `gh` for all GitHub tasks. Before creating a PR:
+
+1. Run in parallel: `git status`, `git diff`, remote tracking check, `git log` + `git diff [base]...HEAD`.
+2. Draft title (English) and body with **Summary** + **Test plan** bullets.
+3. Push branch if not on remote: `git push -u origin HEAD`.
+4. Create PR:
+
+```bash
+gh pr create --title "..." --body "$(cat <<'EOF'
+## Summary
+- ...
+
+## Test plan
+- [ ] ...
+
+EOF
+)"
+```
+
+- Features → target `develop`. Hotfixes → target `main`.
+- Return the PR URL when done.
+- Warn if secrets appear in the diff.
+
+---
+
+## Commit grouping examples
+
+| Changes | Commits |
+|---|---|
+| Help pagination + staff welcome message | 2 commits: `feat(bot): ...` each |
+| Cursor rules only | 1 commit: `chore: add cursor rules for ...` |
+| Bug fix + unrelated formatting | 2 commits — fix separate from style |
+
+When unsure how to split, prefer **smaller, reviewable commits** over one large commit.

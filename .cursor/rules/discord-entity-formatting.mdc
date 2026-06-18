@@ -1,0 +1,73 @@
+---
+description: Format Discord entities with mentions in bot embeds and messages
+globs: bot/**/*.ts
+alwaysApply: false
+---
+
+# Discord entity formatting
+
+In user-facing embeds and messages, always render Discord resources with native mention syntax — never plain names, tags, or raw IDs alone.
+
+Use helpers from `bot/src/utils/guild-display.ts`:
+
+| Entity | Helper | Output |
+|---|---|---|
+| Role (by ID) | `formatRole(guild, roleId)` | `<@&roleId>` |
+| Role (object) | `formatRoleFromRole(role)` | `<@&roleId>` |
+| Text/announcement channel | `formatChannel(guild, channelId)` | `<#channelId>` |
+| Category | `formatCategory(guild, categoryId)` | `<#categoryId>` |
+| User (by ID) | `formatUser(userId)` | `<@userId>` |
+| User (object) | `formatUserFromUser(user)` | `<@userId>` |
+| Guild member | `formatMember(member)` | `<@userId>` |
+
+## Rules
+
+- Do **not** use `role.name`, `user.tag`, `user.username`, or `channel.name` in embed descriptions or reply text shown to users.
+- Prefer helpers over inline `` `<@&${id}>` `` so deleted/missing resources show consistent fallbacks.
+- CSV/Excel exports and audit log filenames may keep plain text identifiers — that is not user-facing Discord UI.
+- Slash command mentions use `</name:id>` via `formatHelpEntry` in `bot-info.ts`.
+
+## Text emphasis and readability
+
+User-facing embeds and messages may use Discord markdown to improve clarity:
+
+| Style | Syntax | Use for |
+|---|---|---|
+| Bold | `**text**` | Team names, tournament names, labels, counts |
+| Italic | `*text*` | Secondary notes, stage labels, helper copy |
+| Underline | `__text__` | Separators such as `__vs__`, section dividers |
+| Monospace | `` `text` `` | Scores, Match IDs, channel slugs, raw numbers |
+
+Use helpers from `bot/src/utils/match-formatting.ts` for bracket/score UI:
+
+- `formatEmphasizedName(name)` — bold team or player name (escapes markdown)
+- `formatScoreValue(score)` — monospace score so it never blends with names like `team 2`
+- `formatMatchupTitle(team1, team2)` — `**team 1** __vs__ **team 2**`
+- `formatMatchScoreBlock(...)` — multi-line score with winner marker
+
+### Score formatting rules
+
+- **Never** write `team 2 3 - 5 team 1` in plain text — names ending in digits become ambiguous.
+- **Always** separate names and scores: `**team 2** · \`3\`` or use `formatMatchScoreBlock`.
+- Put scores in backticks; put team/tournament names in bold.
+- Optional notes use italics: `*Nota del staff*`.
+
+## Examples
+
+```typescript
+// ❌ BAD
+`Role: **${role.name}**`
+`${member.displayName} (@${member.user.username})`
+`Owner: ${owner.user.tag}`
+
+// ✅ GOOD
+`Role: ${formatRoleFromRole(role)}`
+formatUser(member.id)
+formatUserFromUser(owner.user)
+
+// ❌ BAD — ambiguous when team names contain numbers
+`Score: team 2 3 - 5 team 1`
+
+// ✅ GOOD
+formatMatchScoreBlock({ team1Name: 'team 2', team2Name: 'team 1', score1: 3, score2: 5, winnerSide: 2 })
+```
