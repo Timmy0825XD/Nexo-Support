@@ -62,6 +62,7 @@ model Tournament {
   ticketOpenCategory3Id    String?             @map("ticket_open_category_3_id")
   ticketOpenCategory4Id    String?             @map("ticket_open_category_4_id")
   schedulesChannelId       String?             @map("schedules_channel_id")
+  eventsLinksChannelId   String?             @map("events_links_channel_id")
   autoRoomEnabled          Boolean             @default(false) @map("auto_room_enabled")
   createdAt                DateTime            @default(now()) @map("created_at")
   updatedAt                DateTime            @updatedAt @map("updated_at")
@@ -70,6 +71,7 @@ model Tournament {
   matchRooms               MatchRoom[]
   attendance               Attendance[]
   schedules                Schedule[]
+  scheduleResults          ScheduleResult[]
   bracketCorrections       BracketCorrection[]
   participants             Participant[]
 
@@ -96,6 +98,7 @@ model Match {
   matchRooms       MatchRoom[]
   attendance       Attendance[]
   schedules        Schedule[]
+  scheduleResults  ScheduleResult[]
   bracketCorrections BracketCorrection[]
 
   @@index([tournamentId])
@@ -114,27 +117,30 @@ model MatchRoom {
   tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   match        Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
+  @@unique([matchId])
   @@index([tournamentId])
-  @@index([matchId])
   @@index([channelId])
   @@map("match_rooms")
 }
 
 model Attendance {
-  id                 String     @id @default(cuid())
-  tournamentId       String     @map("tournament_id")
-  matchId            String     @map("match_id")
-  ticketChannelId    String     @map("ticket_channel_id")
-  judgeDiscordId     String     @map("judge_discord_id")
-  recorderDiscordId  String     @map("recorder_discord_id")
-  team1Score         Int        @map("team1_score")
-  team2Score         Int        @map("team2_score")
-  remark             String?
-  recordingLink      String?    @map("recording_link")
-  deletedAt          DateTime?  @map("deleted_at")
-  deletedReason      String?    @map("deleted_reason")
-  createdAt          DateTime   @default(now()) @map("created_at")
-  updatedAt          DateTime   @updatedAt @map("updated_at")
+  id                          String     @id @default(cuid())
+  tournamentId                String     @map("tournament_id")
+  matchId                     String     @map("match_id")
+  ticketChannelId             String     @map("ticket_channel_id")
+  judgeDiscordId              String     @map("judge_discord_id")
+  recorderDiscordId           String     @map("recorder_discord_id")
+  team1Score                  Int        @map("team1_score")
+  team2Score                  Int        @map("team2_score")
+  remark                      String?
+  recordingLinks              Json       @default("[]") @map("recording_links")
+  createdByDiscordUserId      String?    @map("created_by_discord_user_id")
+  ticketMessageId             String?    @map("ticket_message_id")
+  attendanceChannelMessageId  String?    @map("attendance_channel_message_id")
+  deletedAt                   DateTime?  @map("deleted_at")
+  deletedReason               String?    @map("deleted_reason")
+  createdAt                   DateTime   @default(now()) @map("created_at")
+  updatedAt                   DateTime   @updatedAt @map("updated_at")
   tournament         Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   match              Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
@@ -154,16 +160,52 @@ model Schedule {
   schedulesMessageId  String?            @map("schedules_message_id")
   ticketMessageId     String?            @map("ticket_message_id")
   thumbnailUrl        String?            @map("thumbnail_url")
+  remark              String?            @map("remark")
+  createdByDiscordUserId String?         @map("created_by_discord_user_id")
+  reminderMessageId   String?            @map("reminder_message_id")
+  reminderSentAt      DateTime?          @map("reminder_sent_at")
+  urgentMessageId     String?            @map("urgent_message_id")
+  urgentSentAt        DateTime?          @map("urgent_sent_at")
+  assignmentButtonsExpiresAt DateTime?   @map("assignment_buttons_expires_at")
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
   tournament          Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   match               Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
   staffAssignments    StaffAssignment[]
+  result              ScheduleResult?
 
+  @@unique([matchId])
   @@index([tournamentId])
   @@index([matchId])
   @@index([ticketChannelId])
+  @@index([scheduledAt])
   @@map("schedules")
+}
+
+model ScheduleResult {
+  id                      String     @id @default(cuid())
+  scheduleId              String     @unique @map("schedule_id")
+  tournamentId            String     @map("tournament_id")
+  matchId                 String     @map("match_id")
+  team1Score              Int        @map("team1_score")
+  team2Score              Int        @map("team2_score")
+  winnerSide              Int        @map("winner_side")
+  notes                   String?
+  proofImageUrls          String[]   @map("proof_image_urls")
+  resultsMessageId        String     @map("results_message_id")
+  ticketMessageId         String?    @map("ticket_message_id")
+  resultChannelId         String     @map("result_channel_id")
+  declaredByDiscordUserId String     @map("declared_by_discord_user_id")
+  declaredAt              DateTime   @map("declared_at")
+  createdAt               DateTime   @default(now()) @map("created_at")
+  updatedAt               DateTime   @updatedAt @map("updated_at")
+  schedule                Schedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  tournament              Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match                   Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@map("schedule_results")
 }
 
 model StaffAssignment {
@@ -172,9 +214,10 @@ model StaffAssignment {
   role           String
   discordUserId  String    @map("discord_user_id")
   resignedAt     DateTime? @map("resigned_at")
-  resignReason   String?   @map("resign_reason")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  schedule       Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  resignReason           String?   @map("resign_reason")
+  attendanceConfirmedAt  DateTime? @map("attendance_confirmed_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  schedule               Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
 
   @@index([scheduleId])
   @@index([discordUserId])
