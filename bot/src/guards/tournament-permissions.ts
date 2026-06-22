@@ -7,6 +7,14 @@ import type { GuildRow } from '../types/guild.js';
 import type { TournamentRow } from '../types/tournament.js';
 import { PermissionError, isGuildAdmin, isOrganiser } from './permissions.js';
 
+export function canListTeams(
+  member: GuildMember,
+  guildConfig: GuildRow | null,
+): boolean {
+  if (isGuildAdmin(member, guildConfig)) return true;
+  return isOrganiser(member, guildConfig);
+}
+
 export function hasTournamentAdminRole(
   member: GuildMember,
   tournament: TournamentRow,
@@ -95,6 +103,22 @@ export function assertRoomAvailabilityPermission(
   if (!canViewRoomAvailability(member, guildConfig)) {
     throw new PermissionError(
       'You need organiser or staff permissions to view available match rooms.',
+    );
+  }
+}
+
+export function assertTeamListPermission(
+  interaction: ChatInputCommandInteraction,
+  guildConfig: GuildRow | null,
+): void {
+  if (!interaction.inGuild() || !interaction.member) {
+    throw new PermissionError('This command can only be used inside a server.');
+  }
+
+  const member = interaction.member as GuildMember;
+  if (!canListTeams(member, guildConfig)) {
+    throw new PermissionError(
+      'You need server admin or organiser permissions to list tournament participants.',
     );
   }
 }

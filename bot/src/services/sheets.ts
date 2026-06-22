@@ -7,6 +7,8 @@ export class SheetsError extends Error {
 
 export type TournamentFormat = '1vs1' | '2vs2' | '3vs3' | '4vs4' | '5vs5';
 
+export const TOURNAMENT_FORMATS: TournamentFormat[] = ['1vs1', '2vs2', '3vs3', '4vs4', '5vs5'];
+
 const SOLO_HEADERS = [
   'Captain Discord Tag',
   'Captain Discord ID',
@@ -64,13 +66,16 @@ export function extractSpreadsheetId(sheetLink: string): string {
   return match[1];
 }
 
-export function extractSpreadsheetGid(sheetLink: string): string {
+export function extractSpreadsheetGid(sheetLink: string): string | null {
   const gidMatch = sheetLink.match(/(?:[#?&]gid=)(\d+)/);
-  return gidMatch?.[1] ?? '0';
+  return gidMatch?.[1] ?? null;
 }
 
-export function buildPublicCsvExportUrl(spreadsheetId: string, gid = '0'): string {
-  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${encodeURIComponent(gid)}`;
+/** CSV export URL. Omits gid when not in the link so Google uses the default worksheet. */
+export function buildPublicCsvExportUrl(spreadsheetId: string, gid?: string | null): string {
+  const base = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
+  if (!gid) return base;
+  return `${base}&gid=${encodeURIComponent(gid)}`;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -306,8 +311,7 @@ export async function fetchPublicSheetCsv(sheetLink: string): Promise<string> {
   return body;
 }
 
-export async function fetchPublicSheetRows(sheetLink: string): Promise<{
-  format: TournamentFormat;
+export async function fetchPublicSheetTable(sheetLink: string): Promise<{
   headerRow: string[];
   rows: string[][];
 }> {
@@ -318,10 +322,85 @@ export async function fetchPublicSheetRows(sheetLink: string): Promise<{
   }
 
   const headerRow = parseCsvLine(lines[0] ?? '');
-  const format = detectTournamentFormatFromHeaders(headerRow);
   const rows = lines.slice(1).map((line) => parseCsvLine(line));
+  return { headerRow, rows };
+}
+
+export async function fetchPublicSheetRows(sheetLink: string): Promise<{
+  format: TournamentFormat;
+  headerRow: string[];
+  rows: string[][];
+}> {
+  const { headerRow, rows } = await fetchPublicSheetTable(sheetLink);
+  const format = detectTournamentFormatFromHeaders(headerRow);
 
   return { format, headerRow, rows };
+}
+
+function stripBracketNameDecorations(value: string): string {
+  return value
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s*\[[^\]]*\]\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function bracketNamesMatch(sheetName: string, targetName: string): boolean {
+  const left = normalizeBracketName(sheetName);
+  const right = normalizeBracketName(targetName);
+  if (left === right) return true;
+  if (left.includes(right) || right.includes(left)) return true;
+
+  const leftStripped = normalizeBracketName(stripBracketNameDecorations(sheetName));
+  const rightStripped = normalizeBracketName(stripBracketNameDecorations(targetName));
+  return leftStripped === rightStripped || leftStripped.includes(rightStripped) || rightStripped.includes(leftStripped);
+}
+
+function buildParticipantLookupFromRow(
+  row: string[],
+  headerRow: string[],
+  format: TournamentFormat,
+  bracketName: string,
+): SheetParticipantLookup {
+  const captainDiscordId = extractCaptainDiscordId(row, headerRow);
+  const memberDiscordIds = collectMemberDiscordIds(row, headerRow, format);
+
+  return {
+    bracketName,
+    captainDiscordId: captainDiscordId ?? memberDiscordIds[0] ?? null,
+    memberDiscordIds,
+  };
+}
+
+function findRowForBracketName(
+  rows: string[][],
+  headerRow: string[],
+  format: TournamentFormat,
+  targetName: string,
+): SheetParticipantLookup | null {
+  const bracketColumnIndex = getBracketNameColumnIndex();
+  let best: { lookup: SheetParticipantLookup; score: number } | null = null;
+
+  for (const row of rows) {
+    const bracketName = (row[bracketColumnIndex] ?? '').trim();
+    if (!bracketName) continue;
+
+    let score = 0;
+    if (normalizeBracketName(bracketName) === normalizeBracketName(targetName)) {
+      score = 100;
+    } else if (bracketNamesMatch(bracketName, targetName)) {
+      score = 80;
+    } else {
+      continue;
+    }
+
+    const lookup = buildParticipantLookupFromRow(row, headerRow, format, bracketName);
+    if (!best || score > best.score) {
+      best = { lookup, score };
+    }
+  }
+
+  return best?.lookup ?? null;
 }
 
 export async function findParticipantsByBracketNames(
@@ -338,16 +417,41 @@ export async function findParticipantsByBracketNames(
     if (!bracketName) continue;
     if (!normalizedTargets.has(normalizeBracketName(bracketName))) continue;
 
-    const captainDiscordId = extractCaptainDiscordId(row, headerRow);
-    const memberDiscordIds = collectMemberDiscordIds(row, headerRow, format);
-    results.set(normalizeBracketName(bracketName), {
-      bracketName,
-      captainDiscordId,
-      memberDiscordIds,
-    });
+    results.set(
+      normalizeBracketName(bracketName),
+      buildParticipantLookupFromRow(row, headerRow, format, bracketName),
+    );
+  }
+
+  for (const targetName of names) {
+    const normalizedTarget = normalizeParticipantName(targetName);
+    if (results.has(normalizedTarget)) continue;
+
+    const fuzzy = findRowForBracketName(rows, headerRow, format, targetName);
+    if (fuzzy) {
+      results.set(normalizedTarget, fuzzy);
+    }
   }
 
   return results;
+}
+
+export async function resolveCaptainsForMatchTeams(
+  sheetLink: string,
+  team1Name: string,
+  team2Name: string,
+): Promise<{ team1CaptainId: string | null; team2CaptainId: string | null }> {
+  try {
+    const lookup = await findParticipantsByBracketNames(sheetLink, [team1Name, team2Name]);
+    return {
+      team1CaptainId:
+        lookup.get(normalizeParticipantName(team1Name))?.captainDiscordId ?? null,
+      team2CaptainId:
+        lookup.get(normalizeParticipantName(team2Name))?.captainDiscordId ?? null,
+    };
+  } catch {
+    return { team1CaptainId: null, team2CaptainId: null };
+  }
 }
 
 export function normalizeParticipantName(name: string): string {

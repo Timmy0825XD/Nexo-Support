@@ -14,21 +14,21 @@ export function buildRoomsCreatedEmbed(
   result: CreateRoomsResult,
 ) {
   const createdLines = result.created
-    .map((room) => `• ${formatChannel(guild, room.channelId)} · \`${room.channelName}\``)
+    .map((room) => `- ${formatChannel(guild, room.channelId)} — \`${room.channelName}\``)
     .join('\n');
 
   const description = [
     result.created.length > 0
-      ? `✅ Se crearon **${result.created.length}** sala(s):\n${createdLines}`
-      : '*No se crearon salas nuevas.*',
+      ? `These **tickets have been Successfully Created**\n${createdLines}`
+      : '*No new tickets were created.*',
     result.skipped.length > 0
-      ? `\n⏭️ Omitidas **${result.skipped.length}** llave(s) que ya tenían sala.`
+      ? `\n⏭️ Skipped **${result.skipped.length}** match(es) that already had a room.`
       : '',
     result.warnings.length > 0
-      ? `\n⚠️ *Advertencias:*\n${result.warnings.map((warning) => `• ${warning}`).join('\n')}`
+      ? `\n⚠️ *Warnings:*\n${result.warnings.map((warning) => `- ${warning}`).join('\n')}`
       : '',
     result.errors.length > 0
-      ? `\n❌ *Errores:*\n${result.errors.map((error) => `• ${error}`).join('\n')}`
+      ? `\n❌ *Errors:*\n${result.errors.map((error) => `- ${error}`).join('\n')}`
       : '',
   ]
     .filter(Boolean)

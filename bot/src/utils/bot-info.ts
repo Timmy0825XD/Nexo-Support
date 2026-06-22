@@ -132,6 +132,48 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
+    title: '👥 Team Commands',
+    subtitle: 'Tournament participant lookup and registration viewer',
+    buttonLabel: '👥 Team',
+    commandNames: ['team'],
+    entries: [
+      {
+        name: '/team info',
+        description: 'Look up a participant by Discord user or in-game ID/name.',
+        permission: 'Public',
+      },
+      {
+        name: '/team list',
+        description: 'Post all registered participants from the tournament sheet.',
+        permission: 'Admin or Organiser',
+      },
+    ],
+  },
+  {
+    title: '📄 Sheet Commands',
+    subtitle: 'Google Sheet templates for tournament registration',
+    buttonLabel: '📄 Sheet',
+    commandNames: ['sheet'],
+    entries: [
+      {
+        name: '/sheet headers',
+        description: 'Show the required header row for a tournament registration sheet.',
+        permission: 'Public',
+      },
+      {
+        name: '/sheet validate',
+        description: 'Validate participant sheet data before creating a tournament.',
+        permission: 'Admin',
+      },
+      {
+        name: '/sheet validation_role',
+        description:
+          'Open support tickets for teams missing a required role (e.g. Verified).',
+        permission: 'Admin',
+      },
+    ],
+  },
+  {
     title: '🚪 Room Commands',
     subtitle: 'Manual match room creation and queue inspection',
     buttonLabel: '🚪 Room',
@@ -229,6 +271,59 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
+    title: '📅 Schedule Commands',
+    subtitle: 'Match scheduling and staff assignment',
+    buttonLabel: '📅 Schedule',
+    commandNames: ['schedule'],
+    entries: [
+      {
+        name: '/schedule create',
+        description: 'Create and publish a match schedule in the ticket and result channel.',
+        permission: 'Admin, Organiser, or Helper (ticket channel only)',
+      },
+      {
+        name: '/schedule show',
+        description: 'View the schedule channel embed for a tournament match.',
+        permission: 'Organiser or Staff',
+      },
+      {
+        name: '/schedule update',
+        description: 'Update an existing match schedule (time, staff, notes, or thumbnail).',
+        permission: 'Admin, Organiser, or Helper (ticket channel only)',
+      },
+      {
+        name: '/schedule delete',
+        description: 'Delete an existing schedule and remove schedule embeds.',
+        permission: 'Helper only (ticket channel only)',
+      },
+      {
+        name: '/schedule unassigned',
+        description: 'View scheduled matches missing Judge or Recorder assignments.',
+        permission: 'Staff only',
+      },
+      {
+        name: '/schedule refresh',
+        description: 'Re-enable assignment buttons on the schedule channel post (filled roles stay disabled).',
+        permission: 'Staff only',
+      },
+      {
+        name: '/schedule resign',
+        description: 'Resign from an assigned Judge or Recorder role.',
+        permission: 'Assigned staff (ticket channel only)',
+      },
+      {
+        name: '/schedule results',
+        description: 'Declare match results with scores, notes, and proof images after the scheduled time.',
+        permission: 'Assigned staff, captains, or tournament staff (ticket channel only)',
+      },
+      {
+        name: '/schedule results_delete',
+        description: 'Delete the declared result embed from the tournament results channel.',
+        permission: 'Tournament organizer or helper (ticket channel only)',
+      },
+    ],
+  },
+  {
     title: '🎫 Ticket Commands',
     subtitle: 'Match ticket lifecycle management',
     buttonLabel: '🎫 Ticket',
@@ -237,6 +332,11 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
       { name: '/ticket close', description: 'Close a match ticket.', permission: 'Organiser only' },
       { name: '/ticket reopen', description: 'Reopen a closed match ticket.', permission: 'Organiser only' },
       { name: '/ticket delete', description: 'Delete a match ticket.', permission: 'Organiser only' },
+      {
+        name: '/ticket transcript',
+        description: 'Archive and delete a role validation support ticket.',
+        permission: 'Organiser only',
+      },
     ],
   },
 ];

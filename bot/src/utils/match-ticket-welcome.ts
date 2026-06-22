@@ -2,20 +2,40 @@ import { EmbedBuilder, type Guild, type TextChannel } from 'discord.js';
 import type { SheetParticipantLookup } from '../services/sheets.js';
 import type { MatchListRow } from '../types/match.js';
 import type { TournamentRow } from '../types/tournament.js';
-import { CUSTOM_EMOJIS, EMBED_COLORS } from '../constants/emojis.js';
+import { EMBED_COLORS } from '../constants/emojis.js';
+import { isGroupStageMatch } from './auto-room-stage.js';
 import { embedField } from './embeds.js';
 import { formatChannel, formatRole, formatUser } from './guild-display.js';
-import { formatEmphasizedName, formatMatchupTitle } from './match-formatting.js';
-import { isGroupStageMatch } from './auto-room-stage.js';
+import { formatScheduleFooterDate } from './schedule-display.js';
 
-function formatCreatedAt(date: Date): string {
-  return date.toLocaleString('en-US', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+function formatMatchEmbedTitle(team1Name: string, team2Name: string): string {
+  return `${team1Name.trim().toUpperCase()} VS ${team2Name.trim().toUpperCase()}`;
+}
+
+function formatGroupLabel(group: string): string {
+  return group.replace(/ · /g, ' — ');
+}
+
+function formatRoundGroupValue(match: MatchListRow): string {
+  const group = match.group?.trim();
+  if (group && isGroupStageMatch(group)) {
+    return formatGroupLabel(group);
+  }
+
+  const round = match.round?.trim();
+  if (round) {
+    return `Round ${round}`;
+  }
+
+  return group ? formatGroupLabel(group) : 'TBD';
+}
+
+function formatCaptainLine(captainId: string | null | undefined): string {
+  return captainId ? formatUser(captainId) : '*Not found*';
+}
+
+function buildChallongeTournamentUrl(challongeId: string): string {
+  return `https://challonge.com/${encodeURIComponent(challongeId.trim())}`;
 }
 
 export function buildMatchTicketWelcomeEmbed(params: {
@@ -25,28 +45,29 @@ export function buildMatchTicketWelcomeEmbed(params: {
   team1?: SheetParticipantLookup | null;
   team2?: SheetParticipantLookup | null;
 }): EmbedBuilder {
-  const captain1 = params.team1?.captainDiscordId;
-  const captain2 = params.team2?.captainDiscordId;
+  const createdAt = new Date();
+  const guildIcon = params.guild.iconURL({ extension: 'png', size: 128 });
 
-  const stageLabel = isGroupStageMatch(params.match.group)
-    ? `Etapa de grupos · ${params.match.group}`
-    : params.match.group;
-
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.success)
-    .setAuthor({ name: params.tournament.name })
-    .setDescription(formatMatchupTitle(params.match.team1_name, params.match.team2_name))
+    .setAuthor({
+      name: params.tournament.name,
+      url: buildChallongeTournamentUrl(params.tournament.challonge_id),
+      ...(guildIcon ? { iconURL: guildIcon } : {}),
+    })
     .addFields(
-      embedField(`${CUSTOM_EMOJIS.done} Match Room Created`, `ℹ️ ${stageLabel}`, false),
-      embedField('👑 Team 1', captain1 ? formatUser(captain1) : '`Captain not found`', true),
-      embedField('👑 Team 2', captain2 ? formatUser(captain2) : '`Captain not found`', true),
-      embedField('📜 Rules', formatChannel(params.guild, params.tournament.rules_channel_id), true),
-      embedField('📅 Deadline', formatChannel(params.guild, params.tournament.deadline_channel_id), true),
+      embedField('Match', formatMatchEmbedTitle(params.match.team1_name, params.match.team2_name), false),
+      embedField('Captain Team 1', formatCaptainLine(params.team1?.captainDiscordId), false),
+      embedField('Captain Team 2', formatCaptainLine(params.team2?.captainDiscordId), false),
+      embedField('Round — Group', formatRoundGroupValue(params.match), false),
+      embedField('Rules', formatChannel(params.guild, params.tournament.rules_channel_id), false),
+      embedField('Deadline', formatChannel(params.guild, params.tournament.deadline_channel_id), false),
     )
     .setFooter({
-      text: `Match ID: ${params.match.challonge_match_id} • Created at • ${formatCreatedAt(new Date())}`,
-    })
-    .setTimestamp();
+      text: `Match ID: ${params.match.challonge_match_id} • Created at: ${formatScheduleFooterDate(createdAt)}`,
+    });
+
+  return embed;
 }
 
 export async function sendMatchTicketWelcome(params: {
@@ -66,13 +87,9 @@ export async function sendMatchTicketWelcome(params: {
   const helperRole = formatRole(params.guild, params.tournament.helper_role_id);
 
   const content = [
-    `${CUSTOM_EMOJIS.done} Sala creada para ${formatMatchupTitle(params.match.team1_name, params.match.team2_name)}.`,
-    `🚨 Please decide on a schedule and ping ${helperRole}.`,
-    captainMentions ? `${captainMentions} Discuss your schedule.` : null,
-    '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+    `**Greetings, Captains.** Your ticket has been created.${captainMentions ? ` ${captainMentions}` : ''}`,
+    `> :alarm_clock: Please agree on a **date and time** for your Schedule, and remember to ping ${helperRole} once the schedule has been finalized.`,
+  ].join('\n');
 
   await params.channel.send({
     content,

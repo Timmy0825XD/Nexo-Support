@@ -1,0 +1,43 @@
+---
+description: Mantener docs/MESSAGES.md sincronizado con mensajes user-facing del bot
+globs: bot/**/*.ts,docs/MESSAGES.md
+alwaysApply: false
+---
+
+# Mensajes del bot — catálogo editable
+
+Catálogo: [`docs/MESSAGES.md`](../../docs/MESSAGES.md)
+
+## Cuándo actualizar MESSAGES.md
+
+Actualiza el catálogo **en el mismo cambio** cuando:
+
+- Modifiques texto visible al usuario en `bot/src/` (comandos, interactions, guards, `*-display.ts`, servicios con errores user-facing).
+- El usuario pida cambiar, añadir o eliminar un mensaje del bot.
+- El usuario edite mensajes manualmente y pida sincronizar la documentación.
+
+## Qué cuenta como mensaje user-facing
+
+- `reply`, `editReply`, `followUp`, `content` de mensajes Discord
+- Títulos, descripciones y fields de embeds
+- Labels de botones y select menus
+- Errores de guards mostrados al usuario
+- Mensajes publicados en canales (schedule, staff welcome)
+- **No** incluir: logs de consola, option descriptions de slash builders, comentarios
+
+## Flujo al cambiar un mensaje
+
+1. Consultar `docs/MESSAGES.md` — localizar ID y ruta del archivo.
+2. Editar la cadena en código (preferir el builder/util compartido si aplica).
+3. Actualizar la fila correspondiente en `MESSAGES.md` (texto exacto en inglés salvo excepciones documentadas).
+4. Si el mensaje usa emoji de título (`successEmbed`/`errorEmbed`), no duplicar el prefijo en el doc — usar `{done}` / `{error}`.
+
+## IDs y estructura
+
+- Mantener IDs estables (`comando.contexto.variante`) al añadir filas nuevas.
+- Cada sección de comando debe tener **Ruta:** con path relativo desde la raíz del repo.
+- Si un mensaje se mueve a un util compartido, actualizar ruta e índice.
+
+## Pedidos del usuario
+
+Si piden "cambiar el mensaje de X" sin citar el archivo: buscar en `MESSAGES.md` primero, luego en código. Tras el cambio, confirmar qué ID se actualizó.

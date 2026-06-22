@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import { CUSTOM_EMOJIS, EMBED_COLORS } from '../constants/emojis.js';
 import type { MatchListRow } from '../types/match.js';
-import { formatMatchupTitle } from './match-formatting.js';
+import { escapeDiscordMarkdown } from './match-formatting.js';
 
 export const ROOM_AVAILABLE_PAGE_SIZE = 5;
 export const ROOM_AVAILABLE_TIMEOUT_MS = 2 * 60 * 1000;
@@ -21,11 +21,21 @@ export interface RoomAvailableEmptyState {
   pendingMatches: MatchListRow[];
 }
 
+function formatMatchStageLabel(match: MatchListRow): string {
+  const group = match.group?.trim();
+  if (group) return group.replace(/ · /g, ' - ');
+  return match.round?.trim() || 'TBD';
+}
+
+function formatPlainMatchup(team1Name: string, team2Name: string): string {
+  return `${escapeDiscordMarkdown(team1Name.trim())} vs ${escapeDiscordMarkdown(team2Name.trim())}`;
+}
+
 function formatMatchBlock(match: MatchListRow, index: number): string {
   return [
-    `${CUSTOM_EMOJIS.done} **Partido ${index + 1}**`,
-    `*${match.group}*`,
-    formatMatchupTitle(match.team1_name, match.team2_name),
+    `🆚 **Match ${index + 1}**`,
+    `*${formatMatchStageLabel(match)}*`,
+    formatPlainMatchup(match.team1_name, match.team2_name),
   ].join('\n');
 }
 
@@ -45,7 +55,7 @@ export function buildAvailableMatchesEmbed(
         .slice(0, 5)
         .map((match) => {
           const channel = match.ticket_channel_id ? ` - <#${match.ticket_channel_id}>` : '';
-          return `• ${formatMatchupTitle(match.team1_name, match.team2_name)}${channel}`;
+          return `• ${formatPlainMatchup(match.team1_name, match.team2_name)}${channel}`;
         })
         .join('\n');
       details.push(`All ready matches already have rooms:\n${roomLines}`);
@@ -78,18 +88,15 @@ export function buildAvailableMatchesEmbed(
     .map((match, index) => formatMatchBlock(match, start + index))
     .join('\n\n');
 
-  const filterLine = groupFilter
-    ? `Filter: **${groupFilter}**`
-    : 'Showing all open matches across every stage and bracket.';
+  const filterLine = groupFilter ? `Filter: **${groupFilter}**\n` : '';
 
   return new EmbedBuilder()
     .setColor(EMBED_COLORS.success)
     .setTitle(`${CUSTOM_EMOJIS.done} Available Rooms for ${tournamentName}`)
     .setDescription(
-      `${filterLine}\nShowing **${start + 1} - ${end}** of **${matches.length}** available match(es).\n\n${body}`,
+      `${filterLine}Showing **${start + 1} - ${end}** of **${matches.length}** available matches.\n\n${body}`,
     )
-    .setFooter({ text: `Page ${pageIndex + 1}/${totalPages}` })
-    .setTimestamp();
+    .setFooter({ text: `Page ${pageIndex + 1}/${totalPages}` });
 }
 
 export function buildAvailableMatchesComponents(
@@ -102,12 +109,12 @@ export function buildAvailableMatchesComponents(
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(ROOM_PREV_ID)
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Success)
       .setLabel('Previous')
       .setDisabled(locked || pageIndex <= 0),
     new ButtonBuilder()
       .setCustomId(ROOM_NEXT_ID)
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Success)
       .setLabel('Next')
       .setDisabled(locked || pageIndex >= totalPages - 1),
   );
@@ -125,13 +132,13 @@ export async function runAvailableRoomsPagination(
   const render = (locked: boolean) => ({
     embeds: [buildAvailableMatchesEmbed(tournamentName, matches, currentPage, groupFilter, emptyState)],
     components:
-      matches.length > ROOM_AVAILABLE_PAGE_SIZE
+      matches.length > 0
         ? [buildAvailableMatchesComponents(currentPage, matches.length, locked)]
         : [],
   });
 
   const message = await interaction.editReply(render(false));
-  if (matches.length <= ROOM_AVAILABLE_PAGE_SIZE) return;
+  if (matches.length === 0 || matches.length <= ROOM_AVAILABLE_PAGE_SIZE) return;
 
   const totalPages = Math.ceil(matches.length / ROOM_AVAILABLE_PAGE_SIZE);
   const collector = message.createMessageComponentCollector({

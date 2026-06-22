@@ -104,7 +104,7 @@ Configuración completa de un torneo en un servidor.
 | `transcript_channel_id` | `TEXT` | |
 | `rules_channel_id` | `TEXT` | |
 | `deadline_channel_id` | `TEXT` | |
-| `result_channel_id` | `TEXT` | Opcional |
+| `result_channel_id` | `TEXT` | Canal de resultados del torneo (**requerido** en `/tournament add`; nullable en DB para registros legacy) |
 | `closed_ticket_category_id` | `TEXT` | |
 | `close_ticket_category_2_id` | `TEXT` | Opcional — overflow |
 | `ticket_open_category_1_id` | `TEXT` | |
@@ -112,7 +112,7 @@ Configuración completa de un torneo en un servidor.
 | `ticket_open_category_3_id` | `TEXT` | Opcional |
 | `ticket_open_category_4_id` | `TEXT` | Opcional |
 | `auto_room_enabled` | `BOOLEAN` | Default `false` |
-| `schedules_channel_id` | `TEXT` | Canal de schedules (requerido para `/schedule create`) |
+| `schedules_channel_id` | `TEXT` | Reservado — no usado en v1 de `/schedule create` (ver `result_channel_id`) |
 | `created_at` | `TIMESTAMPTZ` | |
 | `updated_at` | `TIMESTAMPTZ` | |
 
@@ -140,7 +140,7 @@ Partidos sincronizados desde Challonge o creados al abrir tickets.
 | `team1_score` | `INTEGER` | Nullable hasta resultado |
 | `team2_score` | `INTEGER` | |
 | `winner_side` | `INTEGER` | `1`, `2`, o null |
-| `status` | `TEXT` | `pending`, `completed`, `open` |
+| `status` | `TEXT` | `pending`, `open`, `completed` — auto-room solo usa `open` |
 | `ticket_channel_id` | `TEXT` | Canal Discord del ticket |
 | `created_at` | `TIMESTAMPTZ` | |
 | `updated_at` | `TIMESTAMPTZ` | |
@@ -153,20 +153,22 @@ Partidos sincronizados desde Challonge o creados al abrir tickets.
 
 ### `match_rooms`
 
-Salas/tickets creados para partidos (tracking de auto-room y manual).
+Salas/tickets creados para partidos (tracking de auto-room y manual). **Un match solo puede tener una sala** (`UNIQUE` en `match_id`).
 
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | `TEXT` PK | CUID |
 | `tournament_id` | `TEXT` FK → `tournaments` | |
-| `match_id` | `TEXT` FK → `matches` | |
+| `match_id` | `TEXT` FK → `matches` | **Único** — una fila por partido |
 | `channel_id` | `TEXT` | Canal Discord creado |
 | `category_id` | `TEXT` | Categoría donde se creó |
 | `created_at` | `TIMESTAMPTZ` | |
 
-**Índices:** `tournament_id`, `match_id`, `channel_id`.
+**Índices:** `tournament_id`, `channel_id`, **`UNIQUE (match_id)`** — migración `20250618180000_match_rooms_unique_match_id`.
 
 **Comandos:** `/auto_room *`, `/room create`.
+
+**Concurrencia:** `createRoomsForMatches` serializa por `tournament_id` (`utils/tournament-room-lock.ts`) y revalida antes de insertar; violación `23505` se trata como sala ya existente.
 
 ---
 
@@ -178,14 +180,17 @@ Registros de asistencia y trabajo del staff por partido/ticket.
 |---|---|---|
 | `id` | `TEXT` PK | CUID |
 | `tournament_id` | `TEXT` FK → `tournaments` | |
-| `match_id` | `TEXT` FK → `matches` | |
+| `match_id` | `TEXT` FK → `matches` | Una asistencia activa por match (`deleted_at IS NULL`) |
 | `ticket_channel_id` | `TEXT` | |
 | `judge_discord_id` | `TEXT` | |
 | `recorder_discord_id` | `TEXT` | |
 | `team1_score` | `INTEGER` | |
-| `team2_score` | `INTEGER` | |
-| `remark` | `TEXT` | Opcional |
-| `recording_link` | `TEXT` | URL de grabación |
+| `team2_score` | `INTEGER` | Matches = `team1_score + team2_score` |
+| `remark` | `TEXT` | Autocomplete `DW` = default win |
+| `recording_links` | `JSONB` | Array de URLs YouTube (máx. 7) |
+| `created_by_discord_user_id` | `TEXT` | Quien ejecutó `/attendance mark` |
+| `ticket_message_id` | `TEXT` | Embed público en el ticket |
+| `attendance_channel_message_id` | `TEXT` | Embed público en canal attendance |
 | `deleted_at` | `TIMESTAMPTZ` | Soft delete (`/attendance delete`) |
 | `deleted_reason` | `TEXT` | |
 | `created_at` | `TIMESTAMPTZ` | |
@@ -208,15 +213,51 @@ Horarios publicados para partidos en tickets.
 | `match_id` | `TEXT` FK → `matches` | |
 | `ticket_channel_id` | `TEXT` | |
 | `scheduled_at` | `TIMESTAMPTZ` | UTC |
-| `schedules_message_id` | `TEXT` | Mensaje en canal de schedules |
+| `schedules_message_id` | `TEXT` | Mensaje en canal de schedules (`guilds.schedule_channel_id` vía `/staff config`) |
+| `remark` | `TEXT` | Nota opcional del schedule (max 130 chars) |
+| `created_by_discord_user_id` | `TEXT` | Usuario Discord que creó el schedule |
 | `ticket_message_id` | `TEXT` | Embed en el ticket |
 | `thumbnail_url` | `TEXT` | Opcional |
+| `reminder_message_id` | `TEXT` | Mensaje de recordatorio T-10 en el ticket |
+| `reminder_sent_at` | `TIMESTAMPTZ` | Cuándo se envió el recordatorio |
+| `urgent_message_id` | `TEXT` | Post de urgencia en schedule channel |
+| `urgent_sent_at` | `TIMESTAMPTZ` | Cuándo se procesó el check de asistencia |
+| `assignment_buttons_expires_at` | `TIMESTAMPTZ` | Ventana activa de botones Judge/Recorder en el post del schedule channel (10 min; `/schedule refresh` renueva) |
 | `created_at` | `TIMESTAMPTZ` | |
 | `updated_at` | `TIMESTAMPTZ` | |
 
-**Índices:** `tournament_id`, `match_id`, `ticket_channel_id`.
+**Índices:** `tournament_id`, `match_id`, `ticket_channel_id`, `scheduled_at`.
 
-**Comandos:** `/schedule create|delete|refresh|unassigned|resign`.
+**Comandos:** `/schedule create|delete|refresh|unassigned|resign|results|results_delete`.
+
+---
+
+### `schedule_results`
+
+Resultados declarados para un schedule (embed en canal de resultados del torneo).
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | `TEXT` PK | CUID |
+| `schedule_id` | `TEXT` FK → `schedules` | **Único** — un resultado por schedule |
+| `tournament_id` | `TEXT` FK → `tournaments` | |
+| `match_id` | `TEXT` FK → `matches` | |
+| `team1_score` | `INTEGER` | |
+| `team2_score` | `INTEGER` | |
+| `winner_side` | `INTEGER` | `1` o `2` |
+| `notes` | `TEXT` | Notas opcionales del resultado |
+| `proof_image_urls` | `TEXT[]` | URLs de capturas adjuntas en Discord |
+| `results_message_id` | `TEXT` | Mensaje en `tournaments.result_channel_id` |
+| `ticket_message_id` | `TEXT` | Mensaje en el ticket del partido |
+| `result_channel_id` | `TEXT` | Canal donde se publicó |
+| `declared_by_discord_user_id` | `TEXT` | Usuario que declaró el resultado |
+| `declared_at` | `TIMESTAMPTZ` | Momento de la declaración |
+| `created_at` | `TIMESTAMPTZ` | |
+| `updated_at` | `TIMESTAMPTZ` | |
+
+**Índices:** `UNIQUE (schedule_id)`, `tournament_id`, `match_id`.
+
+**Comandos:** `/schedule results`, `/schedule results_delete`.
 
 ---
 
@@ -232,6 +273,7 @@ Asignaciones de Judge/Recorder a un schedule (soporta resign).
 | `discord_user_id` | `TEXT` | |
 | `resigned_at` | `TIMESTAMPTZ` | Null si activo |
 | `resign_reason` | `TEXT` | |
+| `attendance_confirmed_at` | `TIMESTAMPTZ` | Confirmación de asistencia vía botón T-10 |
 | `created_at` | `TIMESTAMPTZ` | |
 
 **Índices:** `schedule_id`, `discord_user_id`.
@@ -337,5 +379,11 @@ cp ../prisma/.env.example ../prisma/.env   # configurar DATABASE_URL + DIRECT_UR
 bun run db:push      # desarrollo
 bun run db:migrate   # producción
 ```
+
+**Migraciones recientes:**
+
+| ID | Cambio |
+|---|---|
+| `20250618180000_match_rooms_unique_match_id` | `UNIQUE` en `match_rooms.match_id`; deduplica filas previas antes de aplicar |
 
 Ver [`../README.md`](../README.md) para el flujo completo con Bun.

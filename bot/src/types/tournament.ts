@@ -19,6 +19,7 @@ export interface TournamentRow {
   ticket_open_category_3_id: string | null;
   ticket_open_category_4_id: string | null;
   schedules_channel_id: string | null;
+  events_links_channel_id: string | null;
   auto_room_enabled: boolean;
   created_at: string;
   updated_at: string;

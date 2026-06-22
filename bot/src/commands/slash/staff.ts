@@ -1,7 +1,9 @@
 import { ZodError } from 'zod';
+import { AttachmentBuilder } from 'discord.js';
 import {
-  ChannelType,
+  MessageFlags,
   SlashCommandBuilder,
+  ChannelType,
   SlashCommandSubcommandBuilder,
 } from 'discord.js';
 import type { SlashCommand } from '../types.js';
@@ -20,10 +22,18 @@ import {
 } from '../../schemas/staff-positions.js';
 import { staffConfigEditSchema, staffConfigSetSchema } from '../../schemas/staff-config.js';
 import {
-  aggregateStaffWork,
+  assertStaffWorkPermission,
+} from '../../guards/attendance-permissions.js';
+import {
   fetchAttendanceForTournament,
-  formatStaffWorkSection,
 } from '../../services/attendance.js';
+import { resolveTournamentFormat } from '../../utils/schedule-captain-display.js';
+import { buildStaffWorkReply } from '../../utils/attendance-display.js';
+import {
+  aggregateStaffWork,
+  buildLinkDiscountReportText,
+  buildLinkPaymentDiscounts,
+} from '../../utils/staff-work-pay.js';
 import {
   getGuildConfig,
   isStaffConfigured,
@@ -38,7 +48,7 @@ import {
   resolveRolesForRecruit,
   sendStaffWelcomeMessage,
 } from '../../services/staff-hr.js';
-import { getTournamentByName } from '../../services/tournaments.js';
+import { getFullTournamentByName } from '../../services/tournaments.js';
 import { errorEmbed, infoEmbed, successEmbed } from '../../utils/embeds.js';
 import {
   buildStaffEditEmbed,
@@ -448,11 +458,22 @@ export const staffCommand: SlashCommand = {
     }
 
     if (subcommand === 'work') {
+      try {
+        assertStaffWorkPermission(interaction, guildConfig);
+      } catch (error) {
+        const message =
+          error instanceof PermissionError
+            ? error.message
+            : 'You do not have permission to run this command.';
+        await interaction.editReply({ embeds: [errorEmbed('Permission Denied', message)] });
+        return;
+      }
+
       const tournamentName = interaction.options.getString('tournament', true);
       const includeDefaultWins =
         interaction.options.getBoolean('include_default_wins') ?? false;
 
-      const tournament = await getTournamentByName(
+      const tournament = await getFullTournamentByName(
         supabase,
         interaction.guild.id,
         tournamentName,
@@ -466,11 +487,14 @@ export const staffCommand: SlashCommand = {
       }
 
       await interaction.guild.members.fetch();
-      const records = await fetchAttendanceForTournament(
+      const allRecords = await fetchAttendanceForTournament(
         supabase,
         tournament.id,
-        includeDefaultWins,
+        true,
       );
+      const records = includeDefaultWins
+        ? allRecords
+        : allRecords.filter((record) => record.remark?.trim().toUpperCase() !== 'DW');
 
       if (records.length === 0) {
         await interaction.editReply({
@@ -485,19 +509,37 @@ export const staffCommand: SlashCommand = {
       }
 
       const stats = aggregateStaffWork(records);
-      const description = [
-        '✅ Staff work statistics generated successfully.',
-        '',
-        formatStaffWorkSection(interaction.guild, 'Judges', stats.judges),
-        '',
-        formatStaffWorkSection(interaction.guild, 'Recorders', stats.recorders),
-        '',
-        formatStaffWorkSection(interaction.guild, 'Judge & Recorder', stats.dual),
-      ].join('\n');
-
-      await interaction.editReply({
-        embeds: [infoEmbed(`Staff Work — ${tournament.name}`, description.slice(0, 4096))],
+      const format = await resolveTournamentFormat(tournament.sheet_link);
+      const discounts = buildLinkPaymentDiscounts(records, format);
+      const { content, embeds } = buildStaffWorkReply({
+        guild: interaction.guild,
+        tournamentName: tournament.name,
+        includeDefaultWins,
+        judges: stats.judges,
+        recorders: stats.recorders,
+        dual: stats.dual,
       });
+
+      await interaction.editReply({ content, embeds });
+
+      if (discounts.length > 0) {
+        const report = buildLinkDiscountReportText({
+          guild: interaction.guild,
+          tournamentName: tournament.name,
+          format,
+          includeDefaultWins,
+          discounts,
+        });
+        await interaction.followUp({
+          content: 'Link payment adjustment details are attached.',
+          files: [
+            new AttachmentBuilder(Buffer.from(report, 'utf-8'), {
+              name: `${tournament.name.replace(/[^\w.-]+/g, '_')}-link-discounts.txt`,
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+      }
     }
   },
 };

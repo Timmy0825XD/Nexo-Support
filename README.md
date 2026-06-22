@@ -63,7 +63,9 @@ En Supabase → **Settings → Database → Connection string**:
 Desde `bot/`:
 
 ```bash
-bun run db:push
+bun run db:push      # desarrollo — schema completo
+# o, con migraciones versionadas:
+bun run db:migrate   # producción — incluye UNIQUE en match_rooms.match_id
 ```
 
 Schema y tablas: [`docs/DATABASE.md`](./docs/DATABASE.md).

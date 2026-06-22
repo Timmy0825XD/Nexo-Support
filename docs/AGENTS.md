@@ -71,11 +71,41 @@ src/services/
 ├── matches.ts
 ├── attendance.ts
 ├── schedules.ts
+├── schedule-reminders.ts  # T-10 reminders + T-0 urgent staff alerts
 ├── sheets.ts
 ├── challonge.ts
+├── match-rooms.ts       # Ticket creation (lock + dedup)
+├── auto-room.ts         # Worker + processTournamentAutoRooms
 ├── transcripts.ts
 ├── guild-logs.ts        # Audit embeds → bot_logs / challonge_logs channels
 └── encryption.ts      # Challonge key encrypt/decrypt
+```
+
+**Interacciones (botones):**
+
+```
+src/interactions/
+└── schedule-buttons.ts  # Judge/Recorder assign + attendance confirm buttons
+```
+
+**Workers:**
+
+```
+src/workers/
+├── auto-room.ts           # 60s — open match rooms
+└── schedule-reminder.ts   # 60s — T-10 reminders + T-0 urgent staff alerts
+```
+
+**Utilidades relacionadas con rooms:**
+
+```
+src/utils/
+├── auto-room-stage.ts       # Elegibilidad 1 vs 2 etapas
+├── tournament-room-lock.ts  # Mutex por tournament_id
+├── ticket-channel-name.ts   # Slug r{round}-team-vs-team
+├── schedule-display.ts      # Schedule embeds, buttons, unassigned pagination
+├── schedule-thumbnail.ts    # PNG banner generation (@napi-rs/canvas)
+└── schedule-channel-name.ts # 🔴 prefix for scheduled tickets
 ```
 
 ---
@@ -169,7 +199,14 @@ Implementar en `guards/permissions.ts` — no duplicar por comando.
 ### Google Sheets
 
 - `services/sheets.ts` — leer participantes por `sheet_link`.
-- Validar headers al configurar torneo (`/tournament add`).
+- Validar headers al configurar torneo (`/tournament add`); `result_channel` es obligatorio al crear.
+
+### Auto-room (reglas de negocio)
+
+- Crear salas solo si Challonge `status === 'open'` (`listOpenMatchesWithoutRooms`).
+- Torneos 2 etapas: filtrar con `isMatchEligibleForAutoRoom` (`auto-room-stage.ts`).
+- Toda creación pasa por `createRoomsForMatches` → lock `withTournamentRoomCreationLock`.
+- No confiar solo en memoria: `match_rooms.match_id` es UNIQUE en DB.
 
 ### Discord
 
@@ -224,6 +261,7 @@ Ver [`GITFLOW.md`](./GITFLOW.md). Ramas de trabajo: `feature/<descripcion>`.
 | [`CONTEXT.md`](./CONTEXT.md) | Arquitectura y roadmap |
 | [`AGENTS.md`](./AGENTS.md) | Este archivo — reglas técnicas |
 | [`COMMANDS.md`](./COMMANDS.md) | Spec de slash commands |
+| [`MESSAGES.md`](./MESSAGES.md) | Catálogo de mensajes user-facing (rutas + textos editables) |
 | [`DATABASE.md`](./DATABASE.md) | Tablas Supabase y RLS |
 | [`EMOJIS.md`](./EMOJIS.md) | Emojis del bot |
 | [`GITFLOW.md`](./GITFLOW.md) | Git Flow |

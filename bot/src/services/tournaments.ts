@@ -193,6 +193,16 @@ export async function getTournamentByName(
   };
 }
 
+export async function getFullTournamentByName(
+  supabase: SupabaseClient,
+  guildId: string,
+  name: string,
+): Promise<TournamentRow | null> {
+  const listRow = await getTournamentByName(supabase, guildId, name);
+  if (!listRow) return null;
+  return getTournamentById(supabase, guildId, listRow.id);
+}
+
 export async function searchTournaments(
   supabase: SupabaseClient,
   guildId: string,
@@ -276,6 +286,7 @@ export async function createTournament(
       ticket_open_category_2_id: input.ticket_open_category_2_id,
       ticket_open_category_3_id: input.ticket_open_category_3_id ?? null,
       ticket_open_category_4_id: input.ticket_open_category_4_id ?? null,
+      events_links_channel_id: input.events_links_channel_id ?? null,
       auto_room_enabled: false,
       created_at: now,
       updated_at: now,

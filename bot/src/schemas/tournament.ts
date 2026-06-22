@@ -22,6 +22,7 @@ export const tournamentAddSchema = z.object({
   close_ticket_category_2_id: snowflake.optional(),
   ticket_open_category_3_id: snowflake.optional(),
   ticket_open_category_4_id: snowflake.optional(),
+  events_links_channel_id: snowflake.optional(),
 });
 
 export type TournamentAdd = z.infer<typeof tournamentAddSchema>;
@@ -44,6 +45,7 @@ export const tournamentEditSchema = z
     ticket_open_category_2_id: snowflake.optional(),
     ticket_open_category_3_id: snowflake.optional(),
     ticket_open_category_4_id: snowflake.optional(),
+    events_links_channel_id: snowflake.optional(),
     auto_room_enabled: z.boolean().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), {
@@ -68,6 +70,7 @@ export const TOURNAMENT_EDIT_FIELD_KEYS = [
   'ticket_open_category_2_id',
   'ticket_open_category_3_id',
   'ticket_open_category_4_id',
+  'events_links_channel_id',
   'auto_room_enabled',
 ] as const;
 

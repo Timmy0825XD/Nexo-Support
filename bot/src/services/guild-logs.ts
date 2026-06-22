@@ -6,16 +6,13 @@ import type { GuildRow } from '../types/guild.js';
 import { LOG_COLORS } from '../constants/log-colors.js';
 import {
   buildBotEventLogEmbed,
-  buildChallongeLogEmbed,
+  buildChallongeCredentialsUpdatedLogEmbed,
+  buildChallongeMatchUpdatedLogEmbed,
+  buildChallongeTournamentLinkedLogEmbed,
   buildSettingsConfigLogEmbed,
   buildStaffConfigLogEmbed,
 } from '../utils/log-embeds.js';
-import {
-  formatCompactScoreLine,
-  formatEmphasizedName,
-  formatMatchScoreBlock,
-  formatMatchupTitle,
-} from '../utils/match-formatting.js';
+import { formatEmphasizedName, formatMatchScoreBlock, formatMatchupTitle } from '../utils/match-formatting.js';
 import {
   formatChannel,
   formatMember,
@@ -105,11 +102,9 @@ export async function logChallongeEvent(params: {
   client: Client;
   guild: Guild;
   config: GuildRow;
-  title: string;
-  fields: Array<{ name: string; value: string; inline?: boolean }>;
+  embed: EmbedBuilder;
 }): Promise<void> {
-  const embed = buildChallongeLogEmbed(params.title, params.fields);
-  await sendGuildLog(params.client, params.guild, params.config, 'challonge_logs', embed);
+  await sendGuildLog(params.client, params.guild, params.config, 'challonge_logs', params.embed);
 }
 
 export async function logBotEvent(params: {
@@ -119,8 +114,14 @@ export async function logBotEvent(params: {
   title: string;
   fields: Array<{ name: string; value: string; inline?: boolean }>;
   color?: number;
+  triggeredBy: User;
 }): Promise<void> {
-  const embed = buildBotEventLogEmbed(params.title, params.fields, params.color);
+  const embed = buildBotEventLogEmbed(
+    params.title,
+    params.fields,
+    params.color,
+    params.triggeredBy,
+  );
   await sendGuildLog(params.client, params.guild, params.config, 'bot_logs', embed);
 }
 
@@ -155,6 +156,7 @@ export async function logStaffRecruitment(params: {
     title: 'Staff Recruited',
     fields,
     color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -183,6 +185,7 @@ export async function logStaffRemoval(params: {
       },
     ],
     color: LOG_COLORS.danger,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -206,6 +209,7 @@ export async function logRoleUserChange(params: {
       triggeredByField(params.triggeredBy),
     ],
     color: params.action === 'added' ? LOG_COLORS.bot : LOG_COLORS.danger,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -234,6 +238,7 @@ export async function logBulkRoleChange(params: {
         : []),
     ],
     color: params.action === 'added' ? LOG_COLORS.bot : LOG_COLORS.danger,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -256,6 +261,7 @@ export async function logTicketClosed(params: {
       triggeredByField(params.triggeredBy),
     ],
     color: LOG_COLORS.warning,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -278,6 +284,7 @@ export async function logTicketReopened(params: {
       triggeredByField(params.triggeredBy),
     ],
     color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -300,6 +307,7 @@ export async function logTicketDeleted(params: {
       triggeredByField(params.triggeredBy),
     ],
     color: LOG_COLORS.danger,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -327,18 +335,18 @@ export async function logTournamentCreated(params: {
       },
     ],
     color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
   });
 
   await logChallongeEvent({
     client: params.client,
     guild: params.guild,
     config: params.config,
-    title: 'Tournament Linked to Challonge',
-    fields: [
-      { name: 'Tournament', value: params.tournament.name, inline: true },
-      { name: 'Challonge ID', value: params.tournament.challonge_id, inline: true },
-      triggeredByField(params.triggeredBy),
-    ],
+    embed: buildChallongeTournamentLinkedLogEmbed({
+      tournamentName: params.tournament.name,
+      challongeId: params.tournament.challonge_id,
+      triggeredBy: params.triggeredBy,
+    }),
   });
 }
 
@@ -366,6 +374,7 @@ export async function logTournamentUpdated(params: {
       { name: 'Changed Fields', value: changedFields || 'None listed', inline: false },
     ],
     color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
   });
 
   if (params.changes.challonge_key) {
@@ -373,12 +382,11 @@ export async function logTournamentUpdated(params: {
       client: params.client,
       guild: params.guild,
       config: params.config,
-      title: 'Tournament Challonge Credentials Updated',
-      fields: [
-        { name: 'Tournament', value: params.tournament.name, inline: true },
-        { name: 'Challonge ID', value: params.tournament.challonge_id, inline: true },
-        triggeredByField(params.triggeredBy),
-      ],
+      embed: buildChallongeCredentialsUpdatedLogEmbed({
+        tournamentName: params.tournament.name,
+        challongeId: params.tournament.challonge_id,
+        triggeredBy: params.triggeredBy,
+      }),
     });
   }
 }
@@ -402,6 +410,7 @@ export async function logTournamentDeleted(params: {
       triggeredByField(params.triggeredBy),
     ],
     color: LOG_COLORS.danger,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -431,6 +440,7 @@ export async function logRoomsCreated(params: {
       { name: 'Channels', value: roomLines || 'None', inline: false },
     ],
     color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -453,6 +463,7 @@ export async function logAutoRoomToggled(params: {
       triggeredByField(params.triggeredBy),
     ],
     color: params.enabled ? LOG_COLORS.config : LOG_COLORS.danger,
+    triggeredBy: params.triggeredBy,
   });
 }
 
@@ -467,49 +478,24 @@ export async function logScoreUploaded(params: {
   winnerSide: 1 | 2;
   score1: number;
   score2: number;
-  note?: string | null;
+  ticketChannelId: string | null;
 }): Promise<void> {
-  const fields = [
-    { name: 'Torneo', value: formatEmphasizedName(params.tournament.name), inline: true },
-    {
-      name: 'Partido',
-      value: formatMatchupTitle(params.team1Name, params.team2Name),
-      inline: false,
-    },
-    {
-      name: 'Marcador',
-      value: formatMatchScoreBlock({
-        team1Name: params.team1Name,
-        team2Name: params.team2Name,
-        score1: params.score1,
-        score2: params.score2,
-        winnerSide: params.winnerSide,
-      }),
-      inline: false,
-    },
-    {
-      name: 'Resumen',
-      value: formatCompactScoreLine({
-        team1Name: params.team1Name,
-        team2Name: params.team2Name,
-        score1: params.score1,
-        score2: params.score2,
-      }),
-      inline: false,
-    },
-    triggeredByField(params.triggeredBy),
-  ];
-
-  if (params.note?.trim()) {
-    fields.push({ name: 'Nota', value: `*${params.note.trim()}*`, inline: false });
-  }
+  const winnerName = params.winnerSide === 1 ? params.team1Name : params.team2Name;
 
   await logChallongeEvent({
     client: params.client,
     guild: params.guild,
     config: params.config,
-    title: 'Score Uploaded',
-    fields,
+    embed: buildChallongeMatchUpdatedLogEmbed({
+      guild: params.guild,
+      tournamentName: params.tournament.name,
+      challongeId: params.tournament.challonge_id,
+      matchLabel: formatMatchupTitle(params.team1Name, params.team2Name),
+      ticketChannelId: params.ticketChannelId,
+      scoreLine: `${params.score1} - ${params.score2}`,
+      winnerName,
+      triggeredBy: params.triggeredBy,
+    }),
   });
 }
 
@@ -519,33 +505,415 @@ export async function logBracketCorrected(params: {
   config: GuildRow;
   triggeredBy: User;
   tournament: TournamentRow;
-  matchLabel: string;
+  team1Name: string;
+  team2Name: string;
+  winnerSide: 1 | 2;
+  ticketChannelId: string | null;
   oldScore1: number | null;
   oldScore2: number | null;
   newScore1: number;
   newScore2: number;
 }): Promise<void> {
+  const winnerName = params.winnerSide === 1 ? params.team1Name : params.team2Name;
+  const newScoreLine = `${params.newScore1} - ${params.newScore2}`;
+  const scoreLine =
+    params.oldScore1 != null && params.oldScore2 != null
+      ? `${params.oldScore1} - ${params.oldScore2} / ${newScoreLine}`
+      : newScoreLine;
+
   await logChallongeEvent({
     client: params.client,
     guild: params.guild,
     config: params.config,
-    title: 'Bracket Score Corrected',
-    fields: [
-      { name: 'Tournament', value: params.tournament.name, inline: true },
-      { name: 'Match', value: params.matchLabel, inline: false },
-      {
-        name: 'Old Score',
-        value: `${params.oldScore1 ?? '?'} - ${params.oldScore2 ?? '?'}`,
-        inline: true,
-      },
-      {
-        name: 'New Score',
-        value: `${params.newScore1} - ${params.newScore2}`,
-        inline: true,
-      },
-      triggeredByField(params.triggeredBy),
-    ],
+    embed: buildChallongeMatchUpdatedLogEmbed({
+      guild: params.guild,
+      tournamentName: params.tournament.name,
+      challongeId: params.tournament.challonge_id,
+      matchLabel: formatMatchupTitle(params.team1Name, params.team2Name),
+      ticketChannelId: params.ticketChannelId,
+      scoreLine,
+      winnerName,
+      triggeredBy: params.triggeredBy,
+    }),
   });
 }
 
 export { buildBotEventLogEmbed };
+
+export async function logScheduleCreated(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  schedule: { id: string; scheduled_at: string };
+  tournamentName: string;
+  matchLabel: string;
+  ticketChannelId: string;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Schedule Created',
+    fields: [
+      { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+      { name: 'Match', value: params.matchLabel, inline: true },
+      { name: 'Scheduled At', value: `\`${params.schedule.scheduled_at}\``, inline: false },
+      { name: 'Ticket', value: formatChannel(params.guild, params.ticketChannelId), inline: true },
+      { name: 'Schedule ID', value: params.schedule.id, inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logScheduleUpdated(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  schedule: { id: string; scheduled_at: string };
+  tournamentName: string;
+  matchLabel: string;
+  ticketChannelId: string;
+  reason?: string;
+}): Promise<void> {
+  const fields = [
+    { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+    { name: 'Match', value: params.matchLabel, inline: true },
+    { name: 'Scheduled At', value: `\`${params.schedule.scheduled_at}\``, inline: false },
+    { name: 'Ticket', value: formatChannel(params.guild, params.ticketChannelId), inline: true },
+    { name: 'Schedule ID', value: params.schedule.id, inline: true },
+    triggeredByField(params.triggeredBy),
+  ];
+  if (params.reason?.trim()) {
+    fields.push({ name: 'Reason', value: params.reason.trim(), inline: false });
+  }
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Schedule Updated',
+    fields,
+    color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logScheduleDeleted(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournamentName: string;
+  matchLabel: string;
+  ticketChannelId: string;
+  reason?: string;
+}): Promise<void> {
+  const fields = [
+    { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+    { name: 'Match', value: params.matchLabel, inline: true },
+    { name: 'Ticket', value: formatChannel(params.guild, params.ticketChannelId), inline: true },
+    triggeredByField(params.triggeredBy),
+  ];
+  if (params.reason?.trim()) {
+    fields.push({ name: 'Reason', value: params.reason.trim(), inline: false });
+  }
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Schedule Deleted',
+    fields,
+    color: LOG_COLORS.danger,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logScheduleRefreshed(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  scheduleId: string;
+  tournamentName: string;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Schedule Refreshed',
+    fields: [
+      { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+      { name: 'Schedule ID', value: params.scheduleId, inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logScheduleResign(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  scheduleId: string;
+  roles: Array<'judge' | 'recorder'>;
+  reason?: string;
+  tournamentName: string;
+}): Promise<void> {
+  const fields = [
+    { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+    {
+      name: 'Roles',
+      value: params.roles.map((role) => (role === 'judge' ? 'Judge' : 'Recorder')).join(', '),
+      inline: true,
+    },
+    { name: 'Schedule ID', value: params.scheduleId, inline: true },
+    triggeredByField(params.triggeredBy),
+  ];
+  if (params.reason?.trim()) {
+    fields.push({ name: 'Reason', value: params.reason.trim(), inline: false });
+  }
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Schedule Resignation',
+    fields,
+    color: LOG_COLORS.warning,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logScheduleStaffAssigned(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  scheduleId: string;
+  role: 'judge' | 'recorder';
+  tournamentName: string;
+  matchLabel: string;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Schedule Staff Assigned',
+    fields: [
+      { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+      { name: 'Match', value: params.matchLabel, inline: true },
+      {
+        name: 'Role',
+        value: params.role === 'judge' ? 'Judge' : 'Recorder',
+        inline: true,
+      },
+      { name: 'Assignee', value: formatUserFromUser(params.triggeredBy), inline: true },
+      { name: 'Schedule ID', value: params.scheduleId, inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logScheduleResultDeclared(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournamentName: string;
+  team1Name: string;
+  team2Name: string;
+  team1Score: number;
+  team2Score: number;
+  winnerSide: 1 | 2;
+  resultChannelId: string;
+  scheduleId: string;
+  notes?: string | null;
+}): Promise<void> {
+  const fields = [
+    { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+    {
+      name: 'Match',
+      value: formatMatchupTitle(params.team1Name, params.team2Name),
+      inline: true,
+    },
+    {
+      name: 'Score',
+      value: formatMatchScoreBlock({
+        team1Name: params.team1Name,
+        team2Name: params.team2Name,
+        score1: params.team1Score,
+        score2: params.team2Score,
+        winnerSide: params.winnerSide,
+      }),
+      inline: false,
+    },
+    {
+      name: 'Results Channel',
+      value: formatChannel(params.guild, params.resultChannelId),
+      inline: true,
+    },
+    { name: 'Schedule ID', value: params.scheduleId, inline: true },
+    triggeredByField(params.triggeredBy),
+  ];
+
+  if (params.notes?.trim()) {
+    fields.push({ name: 'Notes', value: params.notes.trim(), inline: false });
+  }
+
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Schedule Result Declared',
+    fields,
+    color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logScheduleResultDeleted(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournamentName: string;
+  matchLabel: string;
+  scheduleId: string;
+  reason?: string;
+}): Promise<void> {
+  const fields = [
+    { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+    { name: 'Match', value: params.matchLabel, inline: true },
+    { name: 'Schedule ID', value: params.scheduleId, inline: true },
+    triggeredByField(params.triggeredBy),
+  ];
+
+  if (params.reason?.trim()) {
+    fields.push({ name: 'Reason', value: params.reason.trim(), inline: false });
+  }
+
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Schedule Result Deleted',
+    fields,
+    color: LOG_COLORS.warning,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logAttendanceMarked(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournamentName: string;
+  matchLabel: string;
+  ticketChannelId: string;
+  attendanceId: string;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Attendance Marked',
+    fields: [
+      { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+      { name: 'Match', value: params.matchLabel, inline: true },
+      { name: 'Ticket', value: formatChannel(params.guild, params.ticketChannelId), inline: true },
+      { name: 'Attendance ID', value: params.attendanceId, inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logAttendanceDeleted(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournamentName: string;
+  matchLabel: string;
+  ticketChannelId: string;
+  reason?: string;
+}): Promise<void> {
+  const fields = [
+    { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+    { name: 'Match', value: params.matchLabel, inline: true },
+    { name: 'Ticket', value: formatChannel(params.guild, params.ticketChannelId), inline: true },
+    triggeredByField(params.triggeredBy),
+  ];
+
+  if (params.reason) {
+    fields.push({ name: 'Reason', value: params.reason, inline: false });
+  }
+
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Attendance Deleted',
+    fields,
+    color: LOG_COLORS.warning,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logRecordingLinkAdded(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournamentName: string;
+  matchLabel: string;
+  linkIndex: number;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Recording Link Added',
+    fields: [
+      { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+      { name: 'Match', value: params.matchLabel, inline: true },
+      { name: 'Link #', value: String(params.linkIndex), inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: LOG_COLORS.config,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logRecordingLinkDeleted(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  tournamentName: string;
+  matchLabel: string;
+  deletedCount: number;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'Recording Links Deleted',
+    fields: [
+      { name: 'Tournament', value: formatEmphasizedName(params.tournamentName), inline: true },
+      { name: 'Match', value: params.matchLabel, inline: true },
+      { name: 'Links Removed', value: String(params.deletedCount), inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: LOG_COLORS.warning,
+    triggeredBy: params.triggeredBy,
+  });
+}

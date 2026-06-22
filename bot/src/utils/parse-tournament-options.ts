@@ -32,6 +32,7 @@ export function parseTournamentAdd(interaction: ChatInputCommandInteraction): Om
     close_ticket_category_2_id: getChannel(interaction, 'close_ticket_category_2'),
     ticket_open_category_3_id: getChannel(interaction, 'ticket_open_category_3'),
     ticket_open_category_4_id: getChannel(interaction, 'ticket_open_category_4'),
+    events_links_channel_id: getChannel(interaction, 'events_links'),
   };
 }
 
@@ -56,5 +57,6 @@ export function parseTournamentEdit(interaction: ChatInputCommandInteraction): T
     ticket_open_category_3_id: getChannel(interaction, 'ticket_open_category_3'),
     ticket_open_category_4_id: getChannel(interaction, 'ticket_open_category_4'),
     auto_room_enabled: interaction.options.getBoolean('auto_room_creation') ?? undefined,
+    events_links_channel_id: getChannel(interaction, 'events_links'),
   };
 }
