@@ -73,6 +73,28 @@ flowchart TB
 3. Bot lee/valida participantes vía Sheets API (`/team info`, `/team list`, `/assign_role`).
 4. Opcional: cache en tabla `participants` sincronizada periódicamente.
 
+### Flujo de tickets y auto-room
+
+```text
+/tournament add  →  /auto_room run  →  worker + /upload_score crean siguientes salas
+       │                    │
+       │                    └─ auto_room_enabled = true
+       └─ result_channel, categorías, sheet_link, Challonge key
+
+Solo matches Challonge status = open  →  createRoomsForMatches  →  match_rooms (1:1)
+```
+
+| Etapa | Comportamiento |
+|---|---|
+| Alta torneo | Config en `tournaments`; `auto_room_creation` no sustituye a `/auto_room run` si se desea arrancar después |
+| `/auto_room run` | Habilita auto-room y procesa cola inicial |
+| Tras cada `/upload_score` | Si `auto_room_enabled`, sincroniza y abre tickets para nuevos matches `open` |
+| Worker (60 s) | Mismo procesamiento por torneo con auto-room activo |
+| 2 etapas | Grupos solo en `group_stages_underway`; no salas `pending`; etapa final cuando Challonge abre matches de eliminación |
+| Anti-duplicados | Lock por torneo + `UNIQUE(match_id)` + skip si ya hay `ticket_channel_id` |
+
+Ver [`COMMANDS.md`](./COMMANDS.md) — sección *Sistema auto-room*.
+
 **No hay** página web `/register/[tournamentId]` ni API REST intermedia.
 
 ---
@@ -167,10 +189,10 @@ Nexo Support/
 - [ ] **Fase 2 — Torneos** — `/tournament *`, Sheets link, CRUD config
 - [ ] **Fase 3 — Participantes** — Sheets service, `/team info|list`, cache `participants`
 - [ ] **Fase 4 — Staff** — `/assign_role`, guards, ban DB
-- [ ] **Fase 5 — Challonge** — Read bracket, sync `matches`
-- [ ] **Fase 6 — Tickets y rooms** — `/room *`, `/auto_room *`
-- [ ] **Fase 7 — Schedules** — `/schedule *`
-- [ ] **Fase 8 — Scores y attendance** — `/upload_score`, attendance, `/get sheet`
+- [x] **Fase 5 — Challonge** — Read bracket, sync `matches`, report scores
+- [x] **Fase 6 — Tickets y rooms** — `/room *`, `/auto_room *`, anti-duplicados, 2 etapas
+- [x] **Fase 7 — Schedules** — `/schedule *`
+- [x] **Fase 8 — Scores y attendance** — `/upload_score`, attendance, `/get sheet` (parcial según comandos activos)
 - [ ] **Fase 9 — Transcripts** — HTML fiel a Discord
 - [ ] **Fase 10 — Deploy** — Un solo proceso en producción
 
@@ -182,7 +204,8 @@ Nexo Support/
 |---|---|
 | **Ticket** | Canal privado = ronda del bracket |
 | **Schedule** | Horario de partido; activa Judge/Recorder en ticket |
-| **Room** | Canal/sala creado para un partido |
+| **Room** | Canal/sala creado para un partido (1:1 con `matches` vía `match_rooms`) |
+| **Auto-room** | Creación automática de tickets cuando Challonge marca un match como `open` |
 | **Transcript** | Export HTML del ticket — no en DB |
 | **Sheet** | Google Sheet de participantes del torneo |
 

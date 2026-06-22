@@ -22,7 +22,7 @@ Esta spec **no incluye** registro web personalizado (`tournament registration op
 | Audit logs (guild) | `guilds` → canales `bot_logs` / `challonge_logs` |
 | Rooms / auto-room | `matches`, `match_rooms` |
 | Scores / bracket fix | `matches`, `bracket_corrections` + Challonge API |
-| Schedules | `schedules`, `staff_assignments` |
+| Schedules | `schedules`, `staff_assignments`, `schedule_results` |
 | Teams / participants | Google Sheets + cache opcional `participants` |
 | Transcripts | Solo Discord — no DB |
 | Role management | Discord API (no DB) |
@@ -30,6 +30,19 @@ Esta spec **no incluye** registro web personalizado (`tournament registration op
 | Ticket close / reopen / delete | `matches`, `match_rooms`, `guilds.closed_category_id` |
 | Staff recruit / fire | Discord roles + `guilds` (staff config) |
 | Staff work | `attendance`, `matches`, `tournaments` |
+
+### Sistema auto-room (resumen)
+
+Flujo operativo implementado en `bot/src/services/auto-room.ts`, `match-rooms.ts`, `utils/auto-room-stage.ts`:
+
+1. **`/tournament add`** registra el torneo; `auto_room_creation` solo habilita la *capacidad* — por defecto no crea salas hasta `/auto_room run`.
+2. **`/auto_room run`** pone `auto_room_enabled = true`, sincroniza Challonge → `matches`, y crea tickets para partidos elegibles (hasta 25 en manual, 3 por tick del worker).
+3. Mientras `auto_room_enabled` está activo, el **worker** (cada 60 s) y **`/upload_score`** disparan la misma lógica tras cada resultado.
+4. Solo se crean salas para matches con **`status = open`** en Challonge (no `pending`, aunque ya tengan ambos nombres).
+5. **Torneos de 2 etapas:** en etapa de grupos solo matches de grupo; al cerrar grupos no se crean salas `pending` fantasma; la etapa final requiere que Challonge abra esos matches y que auto-room siga habilitado (recomendado: **`/auto_room run`** al iniciar la etapa 2).
+6. **Anti-duplicados:** mutex por torneo en `createRoomsForMatches`, re-chequeo de `match_rooms` / `ticket_channel_id`, y **`UNIQUE (match_id)`** en `match_rooms` (migración `20250618180000_match_rooms_unique_match_id`).
+
+Detalle por comando: secciones [`/auto_room *`](#auto_room-run), [`/room create`](#room-create), [`/upload_score`](#upload_score).
 
 ---
 
@@ -65,6 +78,8 @@ Esta spec **no incluye** registro web personalizado (`tournament registration op
 | [`/schedule unassigned`](#schedule-unassigned) | Schedule | Staff |
 | [`/schedule refresh`](#schedule-refresh) | Schedule | Staff |
 | [`/schedule resign`](#schedule-resign) | Schedule | Assigned staff |
+| [`/schedule results`](#schedule-results) | Schedule | Staff, captains, tournament staff |
+| [`/schedule results_delete`](#schedule-results_delete) | Schedule | Tournament organizer, helper |
 | [`/settings setup`](#settings-setup) | Settings | Admin |
 | [`/settings edit`](#settings-edit) | Settings | Admin |
 | [`/settings show`](#settings-show) | Settings | Admin |
@@ -73,13 +88,15 @@ Esta spec **no incluye** registro web personalizado (`tournament registration op
 | [`/staff config view`](#staff-config-view) | Staff | Admin |
 | [`/staff fire`](#staff-fire) | Staff | Admin |
 | [`/staff recruit`](#staff-recruit) | Staff | Admin |
-| [`/staff work`](#staff-work) | Staff | Public |
+| [`/staff work`](#staff-work) | Staff | Admin |
 | [`/role user`](#role-user) | Role | Organiser |
 | [`/role add all`](#role-add-all) | Role | Organiser |
 | [`/role remove all`](#role-remove-all) | Role | Organiser |
 | [`/role list`](#role-list) | Role | Organiser |
 | [`/server info`](#server-info) | Server | Public |
 | [`/server banlist`](#server-banlist) | Server | Organiser |
+| [`/sheet headers`](#sheet-headers) | Sheet | Public |
+| [`/sheet validate`](#sheet-validate) | Sheet | Admin |
 | [`/ticket close`](#ticket-close) | Ticket | Organiser |
 | [`/ticket reopen`](#ticket-reopen) | Ticket | Organiser |
 | [`/ticket delete`](#ticket-delete) | Ticket | Organiser |
@@ -118,7 +135,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 **Channel restriction:** Match ticket channels only.
 
-**Permissions:** Staff.
+**Permissions:** Staff with configured **Judge** or **Recorder** role (server admin and organiser may override).
 
 **Options:**
 
@@ -128,8 +145,28 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | recorder | USER | Yes |
 | team1_score | INTEGER | Yes |
 | team2_score | INTEGER | Yes |
-| remark | STRING | No |
+| remark | STRING (Autocomplete) | No |
 | link | STRING | No |
+
+**Autocomplete — `remark`:** `DW` (default win / disqualification).
+
+**Validation:**
+
+- A **schedule** must exist for the match in this ticket.
+- Current time must be **on or after** `schedules.scheduled_at`.
+- No active attendance may already exist for the match.
+- Optional `link` must be a valid **YouTube** URL (counts as link 1 of up to 7).
+- Selected `judge` / `recorder` users must hold the configured Judge / Recorder roles.
+
+**Behavior:**
+
+- Creates one row in `attendance` linked to `tournament_id`, `match_id`, and `ticket_channel_id`.
+- Posts the **same public embed** in the ticket channel and in `tournaments.attendance_channel_id`.
+- Stores Discord message IDs for both embeds (`ticket_message_id`, `attendance_channel_message_id`) for later sync.
+
+**Metrics rule:** 1 attendance = **1 round**; **matches** = `team1_score + team2_score`.
+
+**Default win (`remark = DW`):** excluded from salary/work stats by default; organiser may include via `/staff work include_default_wins` or `/get sheet include_default_win_salary`.
 
 ---
 
@@ -139,7 +176,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 **Channel restriction:** Match ticket channels only.
 
-**Permissions:** Staff only.
+**Permissions:** Attendance **creator** or **organiser** only.
 
 **Options:**
 
@@ -150,10 +187,10 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 **Behavior:**
 
-- Deletes attendance entry
-- Reverts staff work count
-- Removes recording link
-- Logs deletion action
+- Soft-deletes the attendance row (`deleted_at`, optional `deleted_reason`).
+- Updates both attendance embeds (ticket + attendance channel) to a deleted state.
+- Reverts staff work counts for that record.
+- No `/attendance edit` — corrections require delete + re-mark.
 
 ---
 
@@ -161,7 +198,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 **Description:** View attendance records for a user in a tournament.
 
-**Permissions:** Staff.
+**Permissions:** Staff (judge, recorder, main staff role, organiser, or admin).
 
 **Options:**
 
@@ -170,17 +207,15 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | tournament | STRING (Autocomplete) | Yes |
 | user | USER | Yes |
 
-**Response:** Match records, staff role, match score, recording link. Pagination support.
+**Response:** Match records, staff role, match score, recording link count. Pagination (5 per page).
 
-**Database:** `attendance`, `tournaments`.
-
-**Features:** Pagination, attendance analytics, recording link tracking.
+**Database:** `attendance`, `tournaments`, `matches`.
 
 ---
 
 ### `/get sheet`
 
-**Description:** Generate Excel report with attendance, results, work statistics, and tournament configuration.
+**Description:** Generate Excel report with attendance, work statistics, salary estimates, and tournament configuration.
 
 **Permissions:** Organiser only.
 
@@ -197,19 +232,28 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 - 1v1/2v2/3v3 (Per Match)
 - 4v4/5v5 (Per Game)
 
-**Output:** XLSX workbook.
+**Output:** XLSX workbook (ephemeral attachment).
 
-**Sheets:** Attendance Records · Work Count · Results · Tournament Info.
+**Sheets:** Attendance Records · Work Count · Salary Estimate · Tournament Info.
 
-**Features:** Hyperlinks, proof links, staff analytics, tournament snapshot, result audit trail.
+**Salary rates:**
+
+| Format | Judge | Recorder | Dual (same person + link) |
+|---|---|---|---|
+| 1v1/2v2/3v3 (per event) | 450 gold | 450 gold | 575 gold |
+| 4v4/5v5 (per game) | 325 gold | 325 gold | 425 gold |
+
+**Link rules for pay:** Recorder salary requires ≥1 YouTube link. Dual-role salary requires ≥1 link; otherwise counts/pays as **Judge only**.
 
 ---
 
 ### `/link add`
 
-**Description:** Add recording link to an attendance record.
+**Description:** Add a recording link to an attendance record.
 
-**Permissions:** Staff only.
+**Channel restriction:** Any channel.
+
+**Permissions:** **Recorder assigned to that attendance** only.
 
 **Options:**
 
@@ -221,21 +265,20 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 **Validation:**
 
-- Match must exist in attendance
-- Only assigned judge/recorder can add link
-- URL validation required
+- Match must have an active attendance record.
+- Only the attendance `recorder_discord_id` may add links.
+- URL must be **YouTube**; max **7** links per attendance.
+- Updates both attendance embeds after success.
 
-**Database:** `attendance`.
-
-**Features:** Match autocomplete, staff authorization, recording tracking, audit logging.
+**Database:** `attendance.recording_links` (JSON array).
 
 ---
 
 ### `/link delete`
 
-**Description:** Delete recording link from an attendance record.
+**Description:** Delete all recording links from an attendance record.
 
-**Permissions:** Staff only.
+**Permissions:** Assigned recorder; organiser/admin may override.
 
 **Options:**
 
@@ -244,15 +287,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | tournament | STRING (Autocomplete) | Yes |
 | match | STRING (Autocomplete) | Yes |
 
-**Validation:**
-
-- Match must contain recording link
-- Only assigned judge/recorder can delete
-- Organisers/Admins can override
-
-**Database:** `attendance`.
-
-**Features:** Match autocomplete, permission validation, audit logging, soft delete support.
+**Behavior:** Removes all links at once, syncs embeds, audit log.
 
 ---
 
@@ -260,7 +295,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 **Description:** View attendance records missing recording links.
 
-**Permissions:** Staff only.
+**Permissions:** Staff.
 
 **Options:**
 
@@ -268,13 +303,10 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 |---|---|---|
 | tournament | STRING (Autocomplete) | No |
 
-**Output:** Match list, assigned recorder, submission age, missing status.
+**Behavior:**
 
-**Validation:** Only shows attendance without recording links.
-
-**Database:** `attendance`.
-
-**Features:** Missing link tracking, staff monitoring, pagination, recorder accountability.
+- **Without `tournament`:** lists matches where the **invoker** is recorder and links are missing.
+- **With `tournament`:** lists **all** matches in the tournament missing links, responsible recorder, and **days since attendance was marked**.
 
 ---
 
@@ -282,7 +314,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 **Description:** View work statistics of a staff member in a tournament.
 
-**Permissions:** Staff only.
+**Permissions:** Staff.
 
 **Options:**
 
@@ -292,16 +324,98 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | user | USER | Yes |
 | tournament_type | STRING (Choice) | Yes |
 
-**Choices — `tournament_type`:**
+**Output:** Judge / Recorder / Judge & Recorder rounds and matches, default wins, missing links.
 
-- 1v1/2v2/3v3
-- 4v4/5v5
+**Database:** `attendance`, `matches`.
 
-**Output:** Judge work count, recorder work count, total matches, missing links, default wins.
+---
 
-**Database:** `attendance`.
+### `/staff work`
 
-**Features:** Staff analytics, work tracking, salary calculation support, tournament statistics.
+**Description:** View staff work statistics for a tournament using attendance records.
+
+**Permissions:** **Admin only** (server Administrator or configured admin role).
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| tournament | STRING (Autocomplete) | Yes | Tournament to generate statistics for |
+| include_default_wins | BOOLEAN | No | Include attendance from default wins (default: `False`) |
+
+**Behavior:**
+
+- Loads active attendance from `attendance` joined with `matches`.
+- When `include_default_wins = False`: excludes rows with `remark = DW`.
+- Classifies each attendance into **Judges**, **Recorders**, or **Judge & Recorder**:
+  - Different people → judge section + recorder section.
+  - Same person + ≥1 YouTube link → **Judge & Recorder**.
+  - Same person + **no link** → **Judges only** (dual pay downgraded).
+- **Rounds** = count of attendances in that section; **matches** = sum of `team1_score + team2_score`.
+- Reply: **three public embeds** (red / green / blue sections).
+- If any link-related payment downgrades exist: **ephemeral `.txt`** attachment listing expected vs applied pay and discounts (admin-only visibility).
+
+**Database:** `attendance`, `matches`, `tournaments`.
+
+---
+
+## Sheet utilities
+
+### `/sheet headers`
+
+**Description:** Show copy-paste header rows for tournament registration Google Sheets.
+
+**Permissions:** Public.
+
+**Options:**
+
+| Name | Type | Required |
+|---|---|---|
+| format | STRING (Choice) | Yes |
+
+**Choices — `format`:** `1vs1`, `2vs2`, `3vs3`, `4vs4`, `5vs5`, `all`.
+
+**Behavior:** Returns an embed with the required column headers for the selected format. `all` posts one embed per format.
+
+---
+
+### `/sheet validate`
+
+**Description:** Validate participant registration data on a Google Sheet **before** creating a tournament (`/tournament add`).
+
+**Permissions:** Server Administrator or configured admin role.
+
+**Options:**
+
+| Name | Type | Required |
+|---|---|---|
+| sheet_link | STRING | Yes |
+
+**Environment:** `BANNED_PLAYERS_SHEET_URL` — public Google Sheet listing banned in-game IDs (MW ban database).
+
+**Validation checks:**
+
+| # | Rule |
+|---|---|
+| 1 | In-game ID must not appear on the banned players sheet |
+| 2 | Discord ID and in-game ID must be unique across the entire sheet |
+| 3 | Discord account must be older than 2 months |
+| 4 | Discord IDs (17–20 digit snowflakes) and in-game IDs (8–32 hex characters) must be valid |
+| 5 | Participant must not have staff, judge, or recorder roles (`/staff config`) |
+| 6 | Participant must be a member of the current server |
+| 7 | Discord tag/username in the sheet must match the Discord ID |
+| 8 | If the Discord ID is **missing or invalid**, resolve the user by tag when it belongs to exactly one server member (still flagged so the sheet can be corrected) |
+
+**Behavior:**
+
+1. Validates sheet layout and required headers (same as `/tournament add`).
+2. Loads all participant rows and runs checks per player.
+3. Replies **in channel** (public) with pass/fail embeds.
+4. On failure: **paginated embeds** (summary + one section per issue category, `◀` / `▶` buttons, 2 min timeout) and attaches `sheet-validation-report.txt`.
+
+**Dependencies:** Google Sheets (public read), guild member cache, `guilds` staff role IDs, `BANNED_PLAYERS_SHEET_URL`.
+
+**Features:** Pre-tournament QA, duplicate detection, ban list cross-check, staff role guard, tag verification.
 
 ---
 
@@ -345,7 +459,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 ### `/auto_room run`
 
-**Description:** Manually trigger automatic tournament room creation.
+**Description:** Enable automatic room creation for a tournament and immediately process open matches.
 
 **Permissions:** Organiser only.
 
@@ -357,20 +471,33 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 
 **Behavior:**
 
-- Reads tournament bracket
-- Detects pending matches
-- Checks available room slots
-- Creates new match rooms automatically
+- Sets `tournaments.auto_room_enabled = true`
+- Syncs matches from Challonge into `matches`
+- Creates ticket channels for eligible open matches (up to **25** per manual run)
+- Background worker continues processing (up to **3** rooms per minute per tournament)
 
-**Validation:** Prevent duplicate rooms, ignore completed matches, respect room capacity, require tournament configuration.
+**Eligibility rules:**
 
-**Responses:** Rooms created, queued matches, no new rooms available.
+| Condition | Rule |
+|---|---|
+| Challonge match state | Must be **`open`** (not `pending` or `completed`) |
+| Participants | Both team names must be real (not `TBD`, `Winner of`, etc.) |
+| Existing room | No row in `match_rooms` and no `ticket_channel_id` on the match |
+| Single-stage tournament | Challonge state `underway` or `awaiting_review` |
+| Two-stage — group phase | Only matches labeled as group stage while `group_stages_underway` |
+| Two-stage — after groups | Only elimination-stage matches (`Stage 2`, `Round N`, etc.) when main bracket is active |
 
-**Dependencies:** Tournament configuration, match category settings, bracket/Challonge data.
+**Two-stage note:** When the group stage ends, the bot does **not** create rooms for projected/`pending` bracket slots. Run `/auto_room run` again when the final bracket stage is started manually on Challonge.
 
-**Database:** `tournaments`, `match_rooms`.
+**Validation:** Duplicate prevention (per-tournament lock, DB unique on `match_id`, pre-insert checks), category capacity (50 channels/category, overflow to `ticket_open_category_2`–`4`).
 
-**Features:** Automated room allocation, queue system, match synchronization, permission automation.
+**Responses:** Rooms created embed, automation enabled with no pending rooms, or partial warnings/errors.
+
+**Dependencies:** Tournament configuration, Challonge API, Google Sheet (captain lookup), ticket categories.
+
+**Database:** `tournaments`, `matches`, `match_rooms`.
+
+**Features:** Match synchronization, permission automation, welcome embed in ticket, audit log on creation.
 
 ---
 
@@ -478,25 +605,25 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 |---|---|---|
 | tournament | STRING (Autocomplete) | Yes |
 | category | CHANNEL (Category) | Yes |
-| group | STRING (Autocomplete) | Yes |
-| limit | INTEGER | Yes |
+| limit | INTEGER (1–25) | Yes |
+| group | STRING (Autocomplete) | No |
 
 **Behavior:**
 
-- Reads open matches from bracket
-- Filters matches by selected group
-- Creates ticket rooms in selected category
-- Applies permissions automatically
+- Syncs matches from Challonge
+- Lists open matches without rooms (same rules as auto-room: **`status = open`**, both participants ready)
+- Creates up to `limit` ticket rooms in the selected category
+- Uses the same creation pipeline as auto-room (shared lock + duplicate guards)
 
-**Validation:** Ignore completed matches, prevent duplicate rooms, require configured tournament, respect room limits.
+**Validation:** Ignore completed matches, skip matches that already have a room, respect category limits, require configured tournament.
 
-**Responses:** Rooms created, no open matches, queue/full room warnings.
+**Responses:** Rooms created embed with created/skipped/warnings/errors.
 
-**Dependencies:** Tournament configuration, match bracket system, ticket categories.
+**Dependencies:** Tournament configuration, match bracket system, ticket categories, Google Sheet for captain mentions.
 
 **Database:** `tournaments`, `matches`, `match_rooms`.
 
-**Features:** Group-based room creation, manual room management, permission automation, match synchronization.
+**Features:** Optional group filter, manual room management, permission automation, match synchronization.
 
 ---
 
@@ -511,18 +638,18 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | Name | Type | Required |
 |---|---|---|
 | tournament | STRING (Autocomplete) | Yes |
-| group | STRING (Autocomplete) | Yes |
+| group | STRING (Autocomplete) | No |
 
 **Behavior:**
 
-- Reads tournament bracket
-- Detects open matches
-- Filters matches without rooms
-- Displays available room queue
+- Syncs matches from Challonge
+- Lists matches that are **`open`**, have both participants, and have no ticket yet
+- Optional filter by bracket group/stage label
+- Paginated embed when the list is long; if empty, may show existing rooms vs pending placeholders
 
-**Validation:** Ignore completed matches, ignore already-created rooms, require valid group selection.
+**Validation:** Ignore completed matches, ignore matches that already have rooms.
 
-**Responses:** Available match list, queue count, no available rooms message.
+**Responses:** Available match list, or empty-state breakdown (existing rooms / pending bracket slots).
 
 **Dependencies:** Tournament bracket system, match room tracking.
 
@@ -614,6 +741,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | transcript_channel | CHANNEL | Yes |
 | rules_channel | CHANNEL | Yes |
 | deadline_channel | CHANNEL | Yes |
+| result_channel | CHANNEL | Yes |
 | closed_ticket_category | CATEGORY | Yes |
 | ticket_open_category_1 | CATEGORY | Yes |
 | ticket_open_category_2 | CATEGORY | Yes |
@@ -621,19 +749,18 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | close_ticket_category_2 | CATEGORY | No |
 | ticket_open_category_3 | CATEGORY | No |
 | ticket_open_category_4 | CATEGORY | No |
-| result_channel | CHANNEL | No |
 
 **Behavior:**
 
 - Registers tournament configuration
-- Connects bracket API
-- Configures ticket system
-- Enables room automation
-- Sets archive/transcript channels
+- Validates Challonge credentials and Google Sheet headers
+- Connects bracket API and stores encrypted key
+- Configures ticket system channels and categories
+- Sets initial `auto_room_enabled` from `auto_room_creation` (rooms are only created after `/auto_room run` if automation should stay off at add time, set `auto_room_creation` to `false`)
 
-**Features:** Auto-room support, category overflow handling, transcript automation, attendance logging, result synchronization, bracket integration.
+**Features:** Auto-room support, category overflow handling, transcript automation, attendance logging, results channel, bracket integration.
 
-**Dependencies:** Bracket API, Google Sheets, Discord channel/category structure.
+**Dependencies:** Challonge API, Google Sheets, Discord channel/category structure.
 
 **Database:** `tournaments`.
 
@@ -798,45 +925,40 @@ Run Command → Fetch Tournament List → Load Tournament Configurations
 
 ### `/upload_score`
 
-**Description:** Upload match results directly to the Challonge bracket system, finalize the match, close the ticket, archive the room, and generate a transcript automatically.
+**Description:** Upload match results from the **current ticket channel** to Challonge, finalize the ticket, archive transcript, and optionally trigger auto-room for the next matches.
 
-**Permissions:** Admins, Organisers.
+**Permissions:** Tournament admin role, helper role, or guild manager (see `guards/tournament-permissions.ts`).
 
-**Purpose:** Submit official match results, update Challonge bracket scores, automatically finalize match rooms, generate and archive transcripts, move completed tickets to closed categories, mark completed matches visually.
+**Restrictions:** Must be run inside a match ticket channel linked to `matches.ticket_channel_id`.
 
 **Options:**
 
 | Name | Type | Required | Description |
 |---|---|---|---|
-| tournament | STRING (Autocomplete) | Yes | Tournament registered in the bot |
-| match | STRING (Autocomplete) | Yes | Match to upload score for |
 | score1 | INTEGER | Yes | Team/Player 1 score |
 | score2 | INTEGER | Yes | Team/Player 2 score |
 | note | STRING | No | Optional match/result note |
-| winner | STRING | No | Manual winner override if required |
 
 **Behavior:**
 
-- Updates the Challonge bracket
-- Marks the match as completed
-- Detects the match winner automatically
-- Renames the ticket channel with ✅
-- Closes the ticket channel
-- Moves the ticket to the closed category
-- Generates a transcript automatically
-- Archives transcript in transcript channel
-- Logs responsible staff member
+- Resolves tournament and match from the ticket channel topic / DB
+- Reports score to Challonge API
+- Marks match `completed` in `matches`
+- Renames and moves ticket to closed category
+- Posts result embed and archives HTML transcript to `transcript_channel_id`
+- If `auto_room_enabled` for the tournament, runs auto-room follow-up (same eligibility rules as `/auto_room run`, max 3 rooms)
 
 **Workflow:**
 
 ```text
-Run Command → Validate Tournament → Validate Match → Validate Scores
-→ Update Challonge Bracket → Detect Winner → Rename Channel With ✅
-→ Generate Match Result Embed → Close Match Ticket
-→ Move Channel To Closed Category → Generate Transcript → Archive Transcript
+Run In Ticket → Validate Permissions → Report Challonge Score
+→ Mark Match Completed → Close Ticket → Archive Transcript
+→ [If auto_room_enabled] Sync & Create Next Open Rooms
 ```
 
----
+**Database:** `matches`, `match_rooms`, `tournaments`, `bracket_corrections` (via `/correct_bracket` only).
+
+**Features:** Winner detection from scores (ties rejected), Challonge logs, auto-room chain reaction.
 
 ## Schedule management
 
@@ -850,7 +972,7 @@ Run Command → Validate Tournament → Validate Match → Validate Scores
 
 - Match ticket channels only
 - Bot denies usage outside match tickets
-- Server must configure a schedules channel before use
+- Server must configure a **schedule channel** via `/staff config` before use
 
 **Usage example:**
 
@@ -860,13 +982,16 @@ Run Command → Validate Tournament → Validate Match → Validate Scores
 
 **Options:**
 
-| Parameter | Type | Description |
-|---|---|---|
-| hour | INTEGER | Match hour (UTC) |
-| minute | INTEGER | Match minute |
-| day | INTEGER | Match day |
-| month | INTEGER | Match month |
-| year | INTEGER | Match year |
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| hour | INTEGER | Yes | Match hour (UTC) |
+| minute | INTEGER | Yes | Match minute |
+| day | INTEGER | Yes | Match day |
+| month | INTEGER | Yes | Match month |
+| year | INTEGER | Yes | Match year |
+| judge | USER | No | Pre-assign a staff member with the Judge role |
+| recorder | USER | No | Pre-assign a staff member with the Recorder role |
+| remark | STRING | No | Optional note (max 130 characters) |
 
 **Features:**
 
@@ -874,7 +999,8 @@ Run Command → Validate Tournament → Validate Match → Validate Scores
 - Auto-generated match thumbnail/banner
 - Team/player mentions, judge/recorder assignment support
 - Schedule embed creation and notification system
-- Posts to configured schedules channel
+- Posts schedule embed to the **match ticket** and to the guild **schedule channel** (`/staff config`)
+- Optional thumbnail/banner posted to the guild **thumbnail channel** (`/settings`)
 - Renames match channel with `🔴` prefix after creation
 - Supports cleanup via `/schedule delete`
 
@@ -889,9 +1015,10 @@ After:  🔴semi2_haideptrai9061_vs_souelkady
 
 1. Staff uses `/schedule create`
 2. Bot validates permissions and match ticket channel
-3. Bot generates embed, thumbnail, UTC/local time
-4. Bot posts to schedules channel
+3. Bot generates embed, thumbnail, UTC/local time (Sheet lookup for captains)
+4. Bot posts embed to match ticket and schedule channel (staff lines empty if not yet assigned)
 5. Bot renames channel with `🔴`
+6. If `judge` and/or `recorder` were provided: assigns staff, posts assignment messages, **updates embed** with Judge/Recorder (after publish — avoids blocking the initial post on staff/Sheet work)
 6. Bot notifies participants and staff
 
 **Success response:**
@@ -902,6 +1029,26 @@ After:  🔴semi2_haideptrai9061_vs_souelkady
 > 🔔 Notifications sent successfully.
 
 **Notes:** Only one active schedule per match ticket. Staff assignments can be updated later via assignment buttons.
+
+---
+
+### Staff reminder flow (automático)
+
+**Description:** 10 minutes before `scheduled_at`, the bot posts a reminder in the **match ticket** with the same schedule data and **Confirmed** buttons for assigned Judge/Recorder. At match time, unconfirmed staff are removed from the ticket and an urgent replacement post is sent to the guild **schedule channel**.
+
+**Timeline:**
+
+| Time | Action |
+|---|---|
+| T-10 min | Reminder embed + confirm buttons in ticket (only if at least one staff is assigned) |
+| T-10 → T-0 | Assigned staff click **Confirmed** for their role |
+| T-0 (match time) | Unconfirmed staff removed; urgent ping + red embed + assign buttons in schedule channel |
+
+**Urgent ping:** Only `@Judge` and/or `@Recorder` guild roles for roles still missing (unassigned or failed to confirm).
+
+**Reschedule:** Changing `scheduled_at` via `/schedule update` resets reminder/urgent state and deletes prior reminder/urgent messages.
+
+**Worker:** `bot/src/workers/schedule-reminder.ts` — 60s tick, same pattern as auto-room.
 
 ---
 
@@ -933,7 +1080,7 @@ After:  🔴semi2_haideptrai9061_vs_souelkady
 
 **Bot actions on confirm:**
 
-- Deletes schedule entry and embeds (schedules channel + match ticket)
+- Deletes schedule entry and embeds (schedules channel + match ticket + reminder + urgent posts)
 - Removes schedule notifications
 - Removes `🔴` prefix from channel name
 - Updates internal schedule records
@@ -1074,6 +1221,64 @@ haideptrai9061 vs Souelkady | The Brave Sailor Season 3 | 2026-05-21 15:00 UTC
 ```
 
 **Notes:** Resigning may cause the match to appear in `/schedule unassigned`.
+
+---
+
+### `/schedule results`
+
+**Description:** Record match results for a scheduled ticket after the match time has passed. Posts a results embed with proof images to the tournament **results channel**.
+
+**Channel:** Match ticket only.
+
+**Permissions:** Server admin, organiser, tournament admin/helper, assigned Judge/Recorder, or team captains.
+
+**Syntax:**
+
+```
+/schedule results team_1_score:0 team_2_score:3 notes:ggwp image1:<attachment>
+```
+
+| Option | Type | Required | Description |
+|---|---|---|---|
+| team_1_score | INTEGER | Yes | Team 1 score (0–99) |
+| team_2_score | INTEGER | Yes | Team 2 score (0–99) |
+| notes | STRING | No | Additional notes about the match (max 500) |
+| image1–image10 | ATTACHMENT | No* | Screenshot proof of match result |
+
+\* At least one proof image is required.
+
+**Validation:**
+
+- A schedule must exist for the ticket
+- Current time must be **after** `scheduled_at`
+- Scores cannot be tied
+- Tournament must have `result_channel_id` configured
+- Only one result per schedule
+
+**Output:** Results embed + proof images posted to `#tournament-results`. Ephemeral confirmation in the ticket.
+
+---
+
+### `/schedule results_delete`
+
+**Description:** Delete the declared result for the current scheduled match, including the message in the tournament results channel.
+
+**Channel:** Match ticket only.
+
+**Permissions:** Tournament organizer (admin role) or helper only. Server admin/organiser override.
+
+**Syntax:**
+
+```
+/schedule results_delete confirm:True reason:Wrong score entered
+```
+
+| Option | Type | Required | Description |
+|---|---|---|---|
+| confirm | BOOLEAN | Yes | Must be `True` to confirm deletion |
+| reason | STRING | No | Reason for deleting the result |
+
+**Notes:** Does not modify the schedule itself. Use `/schedule delete` to remove the full schedule.
 
 ---
 
@@ -1790,7 +1995,7 @@ Already had Staff Role
 
 **Description:** View staff work statistics for a tournament using attendance records collected through the attendance system.
 
-**Permissions:** Available to all users.
+**Permissions:** **Admin only** (server Administrator or configured admin role).
 
 **Restrictions:**
 
@@ -1812,43 +2017,36 @@ Already had Staff Role
 
 - Loads attendance records for the selected tournament from `attendance`
 - Joins match data for round grouping
-- When `include_default_wins = False`: excludes default wins, walkovers, byes, and automatic advancements
+- When `include_default_wins = False`: excludes rows with `remark = DW`
 - When `include_default_wins = True`: counts every attendance entry
-- Calculates match and round counts per staff member
-- Groups output into three sections: Judges only, Recorders only, Judge & Recorder (dual role)
-- Sorts staff by work count within each section
+- Classifies each attendance: **Judges** / **Recorders** / **Judge & Recorder** (same person + link)
+- Dual role **without** link → counted in **Judges** only; payment downgrade listed in ephemeral `.txt`
+- **Rounds** = 1 per attendance in section; **matches** = `team1_score + team2_score`
+- Reply: three public embeds (Judges · Recorders · Judge & Recorder)
+- Ephemeral `.txt` with link payment discounts when applicable
 
 **Workflow:**
 
 ```text
-Run Command → Validate Tournament → Load Attendance Records
-→ Apply Default Win Filter → Calculate Judge/Recorder/Dual Stats
-→ Sort By Work Count → Generate Statistics Embed → Display Results
+Run Command → Validate Admin → Load Attendance Records
+→ Apply DW Filter → Classify Judge/Recorder/Dual → Aggregate Rounds/Matches
+→ Build Three Embeds → Optional Ephemeral Discount TXT
 ```
 
 **Output sections:**
 
 | Section | Description |
 |---|---|
-| Judges | Staff who worked exclusively as Judges |
+| Judges | Staff who worked exclusively as Judges, or dual-role downgraded to judge (no link) |
 | Recorders | Staff who worked exclusively as Recorders |
-| Judge & Recorder | Staff who worked in both positions |
+| Judge & Recorder | Same person on both roles **with** ≥1 YouTube link |
 
-**Example output:**
+**Salary reference:**
 
-```text
-Judges
-rsshiro — 12 matches (4 rounds)
-abhay0248 — 11 matches (4 rounds)
-
-Recorders
-rhssamuel25 — 12 matches (5 rounds)
-jhoooon777 — 7 matches (2 rounds)
-
-Judge & Recorder
-rsshiro — 29 matches (12 rounds)
-nexwik. — 28 matches (16 rounds)
-```
+| Format | Judge | Recorder | Dual (+ link) |
+|---|---|---|---|
+| 1v1/2v2/3v3 | 450 gold / event | 450 gold / event | 575 gold / event |
+| 4v4/5v5 | 325 gold / game | 325 gold / game | 425 gold / game |
 
 **Success response:**
 
@@ -1856,9 +2054,9 @@ nexwik. — 28 matches (16 rounds)
 
 **Database:** `attendance`, `matches`, `tournaments`.
 
-**Features:** Tournament-specific statistics, Judge/Recorder/dual-role tracking, attendance integration, match and round count tracking, default win filtering.
+**Features:** Tournament-specific statistics, Judge/Recorder/dual tracking, link-based pay downgrade report, default win filtering.
 
-**Notes:** Statistics are generated entirely from attendance records collected through `/get attendance`. Useful for staff evaluations, promotions, rewards, and activity tracking.
+**Notes:** Discount `.txt` is **ephemeral** and **only** sent from this command. Useful for staff evaluations, promotions, rewards, and payroll review.
 
 ---
 
@@ -2488,7 +2686,7 @@ Bot Version: 1.0.0
 | Category | Commands |
 |---|---|
 | 📋 Attendance | `/attendance mark`, `/attendance delete`, `/get attendance`, `/get sheet`, `/link add`, `/link delete`, `/link missing`, `/work_done` |
-| 📅 Schedule | `/schedule create`, `/schedule delete`, `/schedule update`, `/schedule unassigned`, `/schedule refresh`, `/schedule resign`, `/schedule show` |
+| 📅 Schedule | `/schedule create`, `/schedule delete`, `/schedule unassigned`, `/schedule refresh`, `/schedule resign`, `/schedule results`, `/schedule results_delete` |
 | 🏆 Result | `/result declare`, `/result delete` |
 | 👥 Role | `/role user`, `/role add all`, `/role remove all`, `/role list` |
 | 🌐 Server | `/server info`, `/server banlist` |
@@ -2519,7 +2717,8 @@ Bot Version: 1.0.0
 - Los comandos prefix (`[]command`) se documentarán en una fase posterior si aplican equivalentes a estos slash commands.
 - Permisos como **Admin** se mapean al permiso Discord Administrator o al rol `admin_role` configurado en [`/settings setup`](#settings-setup).
 - Permisos **Organiser** se mapean al rol `manager_role` configurado en [`/staff config set`](#staff-config-set), salvo que el comando indique lo contrario.
-- Comandos de **Role**, **Server info** y **Server banlist** operan sobre la API de Discord; **Ticket** usa `matches` / `match_rooms` y la categoría cerrada en `guilds`.
+- Comandos de **Role**, **Server info** y **Server banlist** operan sobre la API de Discord; **Ticket** usa `matches` / `match_rooms` y la categoría cerrada del torneo (`tournaments.closed_ticket_category_id`).
+- **Auto-room:** no crea salas para matches `pending` en Challonge; torneos de 2 etapas filtran por fase (`utils/auto-room-stage.ts`). Duplicados bloqueados por mutex + `UNIQUE` en `match_rooms.match_id`.
 - **Staff fire** y **Staff recruit** requieren permiso Discord Administrator; **Staff work** lee `attendance` filtrado por torneo.
 - Referencias a Google Sheets y MW Ban Database son dependencias externas a validar contra la API en el diseño final.
 - Guild config commands (`/settings`, `/staff config`) follow the [documentation convention](#convencion-documentacion) and the setup/set → edit → show/view pattern. All command subsections are documented in English.

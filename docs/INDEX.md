@@ -8,7 +8,8 @@ Mapa de archivos en `docs/`. Esta documentación describe la **arquitectura mono
 | [`CONTEXT.md`](./CONTEXT.md) | Arquitectura bot monolítico, alcance, stack Bun + Supabase, roadmap | Para entender el diseño del proyecto |
 | [`AGENTS.md`](./AGENTS.md) | Reglas técnicas, convenciones, estructura de `bot/` | Antes de escribir código |
 | [`DATABASE.md`](./DATABASE.md) | Tablas Supabase, ER, RLS, mapeo comando → tabla | Al tocar persistencia o Prisma schema |
-| [`COMMANDS.md`](./COMMANDS.md) | Referencia de slash commands (spec completa) | Al implementar comandos |
+| [`COMMANDS.md`](./COMMANDS.md) | Referencia de slash commands (spec completa, incl. auto-room y tickets) | Al implementar comandos |
+| [`MESSAGES.md`](./MESSAGES.md) | Catálogo editable de textos user-facing (rutas, IDs, embeds, errores) | Al cambiar respuestas del bot o copy de embeds |
 | [`EMOJIS.md`](./EMOJIS.md) | Emojis personalizados del bot | Al diseñar embeds |
 | [`GITFLOW.md`](./GITFLOW.md) | Git Flow y convenciones de ramas | Antes de commitear o abrir PR |
 | [`../README.md`](../README.md) | Instalación Bun, env vars, migraciones, deploy | Para ejecutar el bot localmente |
