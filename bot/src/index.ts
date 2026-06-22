@@ -1,11 +1,13 @@
 import 'dotenv/config';
-import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
+import { Client, Collection, Events, GatewayIntentBits, MessageFlags } from 'discord.js';
 import './utils/uptime.js';
 import { loadPrefixCommands, loadSlashCommands } from './commands/loader.js';
 import type { PrefixCommand, SlashCommand } from './commands/types.js';
 import { initSupabase } from './services/supabase.js';
 import { registerSlashCommands } from './services/register-commands.js';
 import { startAutoRoomWorker } from './workers/auto-room.js';
+import { startScheduleReminderWorker } from './workers/schedule-reminder.js';
+import { handleScheduleButton } from './interactions/schedule-buttons.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -60,6 +62,7 @@ async function syncSlashCommands(): Promise<void> {
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Bot logged in as ${readyClient.user.tag}`);
   startAutoRoomWorker(client, supabase);
+  startScheduleReminderWorker(client, supabase);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -85,6 +88,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.isButton()) {
+    try {
+      const handled = await handleScheduleButton(interaction, supabase);
+      if (handled) return;
+    } catch (error) {
+      console.error('Button interaction failed:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => undefined);
+      }
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const command = slashCommands.get(interaction.commandName);
@@ -97,9 +113,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const message = 'Something went wrong while executing this command.';
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: message });
+      await interaction
+        .followUp({ content: message, flags: MessageFlags.Ephemeral })
+        .catch(() => undefined);
     } else {
-      await interaction.reply({ content: message });
+      await interaction
+        .reply({ content: message, flags: MessageFlags.Ephemeral })
+        .catch(() => undefined);
     }
   }
 });
