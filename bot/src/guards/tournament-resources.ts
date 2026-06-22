@@ -109,6 +109,7 @@ export function validateTournamentResources(
   validateTextChannelField(guild, tournament.rules_channel_id, 'Rules channel');
   validateTextChannelField(guild, tournament.deadline_channel_id, 'Deadline channel');
   validateTextChannelField(guild, tournament.result_channel_id, 'Result channel');
+  validateTextChannelField(guild, tournament.events_links_channel_id, 'Events links channel');
 
   validateCategoryField(guild, tournament.closed_ticket_category_id, 'Closed ticket category');
   validateCategoryField(guild, tournament.close_ticket_category_2_id, 'Secondary closed ticket category');

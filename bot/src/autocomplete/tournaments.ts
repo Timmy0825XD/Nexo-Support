@@ -13,6 +13,14 @@ export function resolveTournamentAutocompleteMode(
     return 'name';
   }
 
+  if (
+    interaction.commandName === 'get' ||
+    interaction.commandName === 'link' ||
+    interaction.commandName === 'work_done'
+  ) {
+    return 'name';
+  }
+
   if (focused.name === 'id') {
     return 'id';
   }
@@ -24,7 +32,10 @@ export function resolveTournamentAutocompleteMode(
   if (
     interaction.commandName === 'room' ||
     interaction.commandName === 'auto_room' ||
-    interaction.commandName === 'correct_bracket'
+    interaction.commandName === 'correct_bracket' ||
+    interaction.commandName === 'schedule' ||
+    interaction.commandName === 'team' ||
+    interaction.commandName === 'upload_score'
   ) {
     return 'id';
   }

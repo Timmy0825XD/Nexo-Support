@@ -20,6 +20,7 @@ const EDIT_FIELD_LABELS: Record<TournamentEditFieldKey, string> = {
   rules_channel_id: 'Rules Channel',
   deadline_channel_id: 'Deadline Channel',
   result_channel_id: 'Result Channel',
+  events_links_channel_id: 'Events Links Channel',
   closed_ticket_category_id: 'Closed Ticket Category',
   close_ticket_category_2_id: 'Secondary Closed Category',
   ticket_open_category_1_id: 'Open Category 1',
@@ -93,6 +94,13 @@ function tournamentSummaryFields(
       tournament.result_channel_id
         ? formatChannel(guild, tournament.result_channel_id)
         : 'Using default from settings',
+      false,
+    ),
+    embedField(
+      '🔗 Events Links Channel',
+      tournament.events_links_channel_id
+        ? formatChannel(guild, tournament.events_links_channel_id)
+        : 'Not configured',
       false,
     ),
     embedField(

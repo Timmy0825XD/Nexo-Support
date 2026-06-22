@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   ChannelType,
-  OverwriteType,
   PermissionFlagsBits,
   type CategoryChannel,
   type Guild,
@@ -17,11 +16,24 @@ import {
 import { buildTicketTopic } from './tickets.js';
 import { sendMatchTicketWelcome } from '../utils/match-ticket-welcome.js';
 import { buildTicketChannelName } from '../utils/ticket-channel-name.js';
+import { buildTicketPermissionOverwrites } from '../utils/ticket-permissions.js';
+import { withTournamentRoomCreationLock } from '../utils/tournament-room-lock.js';
+
+function isUniqueViolation(error: { code?: string } | null): boolean {
+  return error?.code === '23505';
+}
 
 export class MatchRoomError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'MatchRoomError';
+  }
+}
+
+export class MatchRoomAlreadyExistsError extends Error {
+  constructor(matchId: string) {
+    super(`A room already exists for match ${matchId}.`);
+    this.name = 'MatchRoomAlreadyExistsError';
   }
 }
 
@@ -100,61 +112,19 @@ function assertBotCanManageCategory(guild: Guild, category: CategoryChannel): vo
   }
 }
 
-async function buildPermissionOverwrites(
+function buildPermissionOverwrites(
   guild: Guild,
   tournament: TournamentRow,
   guildConfig: GuildRow | null,
   memberIds: string[],
 ) {
-  const overwrites: Array<{
-    id: string;
-    type: OverwriteType;
-    allow: bigint;
-    deny: bigint;
-  }> = [
-    {
-      id: guild.id,
-      type: OverwriteType.Role,
-      deny: PermissionFlagsBits.ViewChannel,
-      allow: 0n,
-    },
-  ];
-
-  const roleIds = new Set<string>([
-    tournament.admin_role_id,
-    tournament.helper_role_id,
-    ...(guildConfig?.manager_role_id ? [guildConfig.manager_role_id] : []),
-  ]);
-
-  for (const roleId of roleIds) {
-    overwrites.push({
-      id: roleId,
-      type: OverwriteType.Role,
-      allow:
-        PermissionFlagsBits.ViewChannel |
-        PermissionFlagsBits.SendMessages |
-        PermissionFlagsBits.ReadMessageHistory |
-        PermissionFlagsBits.AttachFiles |
-        PermissionFlagsBits.EmbedLinks,
-      deny: 0n,
-    });
-  }
-
-  for (const memberId of memberIds) {
-    overwrites.push({
-      id: memberId,
-      type: OverwriteType.Member,
-      allow:
-        PermissionFlagsBits.ViewChannel |
-        PermissionFlagsBits.SendMessages |
-        PermissionFlagsBits.ReadMessageHistory |
-        PermissionFlagsBits.AttachFiles |
-        PermissionFlagsBits.EmbedLinks,
-      deny: 0n,
-    });
-  }
-
-  return overwrites;
+  return buildTicketPermissionOverwrites({
+    guild,
+    tournament,
+    guildConfig,
+    mode: 'open',
+    participantMemberIds: memberIds,
+  });
 }
 
 async function createSingleRoom(params: {
@@ -167,7 +137,23 @@ async function createSingleRoom(params: {
   participantMemberIds: string[];
 }): Promise<CreatedRoomResult> {
   const channelName = buildTicketChannelName(params.match);
-  const overwrites = await buildPermissionOverwrites(
+
+  const { data: existingRooms } = await params.supabase
+    .from('match_rooms')
+    .select('id')
+    .eq('match_id', params.match.id);
+
+  const { data: freshMatch } = await params.supabase
+    .from('matches')
+    .select('ticket_channel_id')
+    .eq('id', params.match.id)
+    .maybeSingle();
+
+  if ((existingRooms?.length ?? 0) > 0 || freshMatch?.ticket_channel_id) {
+    throw new MatchRoomAlreadyExistsError(params.match.id);
+  }
+
+  const overwrites = buildPermissionOverwrites(
     params.guild,
     params.tournament,
     params.guildConfig,
@@ -197,6 +183,9 @@ async function createSingleRoom(params: {
 
   if (roomError) {
     await channel.delete('Failed to persist match room record').catch(() => undefined);
+    if (isUniqueViolation(roomError)) {
+      throw new MatchRoomAlreadyExistsError(params.match.id);
+    }
     throw new Error(`Failed to save match room: ${roomError.message}`);
   }
 
@@ -223,6 +212,19 @@ async function createSingleRoom(params: {
 }
 
 export async function createRoomsForMatches(params: {
+  guild: Guild;
+  supabase: SupabaseClient;
+  tournament: TournamentRow;
+  guildConfig: GuildRow | null;
+  matches: MatchListRow[];
+  categoryId: string;
+}): Promise<CreateRoomsResult> {
+  return withTournamentRoomCreationLock(params.tournament.id, () =>
+    createRoomsForMatchesUnlocked(params),
+  );
+}
+
+async function createRoomsForMatchesUnlocked(params: {
   guild: Guild;
   supabase: SupabaseClient;
   tournament: TournamentRow;
@@ -300,6 +302,10 @@ export async function createRoomsForMatches(params: {
         });
       }
     } catch (error) {
+      if (error instanceof MatchRoomAlreadyExistsError) {
+        result.skipped.push(match.id);
+        continue;
+      }
       const message = error instanceof Error ? error.message : 'Unknown room creation error.';
       result.errors.push(`${match.team1_name} vs ${match.team2_name}: ${message}`);
     }

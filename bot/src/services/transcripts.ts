@@ -74,3 +74,44 @@ export async function archiveTranscript(params: {
     );
   }
 }
+
+export async function archiveValidationTranscript(params: {
+  guild: Guild;
+  channel: TextChannel;
+  guildConfig: GuildRow | null;
+  teamLabel: string;
+  transcriptChannelId: string;
+}): Promise<void> {
+  const attachment = await createTranscript(params.channel as never, {
+    limit: -1,
+    returnType: ExportReturnType.Attachment,
+    filename: buildTranscriptFilename(`validation-${params.teamLabel}`),
+    saveImages: true,
+    poweredBy: false,
+    footerText: 'Exported {number} message{s}',
+  });
+
+  const discordAttachment = attachment as AttachmentBuilder;
+
+  const content = [
+    `**Role validation — ${params.teamLabel}**`,
+    `Server: **${params.guild.name}** · Channel: ${params.channel}`,
+    'Support ticket resolved.',
+  ].join('\n');
+
+  await sendTranscriptAttachment(
+    params.guild,
+    params.transcriptChannelId,
+    discordAttachment,
+    content,
+  );
+
+  if (params.guildConfig?.transcript_logs_channel_id) {
+    await sendTranscriptAttachment(
+      params.guild,
+      params.guildConfig.transcript_logs_channel_id,
+      discordAttachment,
+      content,
+    );
+  }
+}

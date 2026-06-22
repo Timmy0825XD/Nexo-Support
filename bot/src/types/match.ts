@@ -37,3 +37,19 @@ export const MATCH_FULL_COLUMNS = '*';
 
 export const MATCH_LIST_COLUMNS =
   'id, tournament_id, challonge_match_id, round, group, team1_name, team2_name, team1_score, team2_score, winner_side, status, ticket_channel_id';
+
+/** Fields needed for schedule create — excludes post-score data (scores, winner, status). */
+export type MatchScheduleRow = Pick<
+  MatchRow,
+  | 'id'
+  | 'tournament_id'
+  | 'challonge_match_id'
+  | 'round'
+  | 'group'
+  | 'team1_name'
+  | 'team2_name'
+  | 'ticket_channel_id'
+>;
+
+export const MATCH_SCHEDULE_COLUMNS =
+  'id, tournament_id, challonge_match_id, round, group, team1_name, team2_name, ticket_channel_id';

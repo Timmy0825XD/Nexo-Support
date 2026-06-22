@@ -3,8 +3,10 @@ import type { TournamentRow } from '../types/tournament.js';
 import {
   MATCH_FULL_COLUMNS,
   MATCH_LIST_COLUMNS,
+  MATCH_SCHEDULE_COLUMNS,
   type MatchListRow,
   type MatchRow,
+  type MatchScheduleRow,
   type MatchStatus,
 } from '../types/match.js';
 import {
@@ -48,6 +50,59 @@ export async function getMatchById(
   }
 
   return data ? mapRow(data as MatchRow) : null;
+}
+
+export async function getMatchForSchedule(
+  supabase: SupabaseClient,
+  tournamentId: string,
+  matchId: string,
+): Promise<MatchScheduleRow | null> {
+  const { data, error } = await supabase
+    .from('matches')
+    .select(MATCH_SCHEDULE_COLUMNS)
+    .eq('tournament_id', tournamentId)
+    .eq('id', matchId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load match: ${error.message}`);
+  }
+
+  return data ? (data as MatchScheduleRow) : null;
+}
+
+export async function getMatchForScheduleByChallonge(
+  supabase: SupabaseClient,
+  guildId: string,
+  challongeMatchId: string,
+): Promise<{ match: MatchScheduleRow; tournamentId: string } | null> {
+  const { data: tournaments, error: tournamentError } = await supabase
+    .from('tournaments')
+    .select('id')
+    .eq('guild_id', guildId);
+
+  if (tournamentError) {
+    throw new Error(`Failed to load tournaments: ${tournamentError.message}`);
+  }
+
+  const tournamentIds = (tournaments ?? []).map((row) => (row as { id: string }).id);
+  if (tournamentIds.length === 0) return null;
+
+  const { data, error } = await supabase
+    .from('matches')
+    .select(MATCH_SCHEDULE_COLUMNS)
+    .eq('challonge_match_id', challongeMatchId)
+    .in('tournament_id', tournamentIds)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load match: ${error.message}`);
+  }
+
+  if (!data) return null;
+
+  const match = data as MatchScheduleRow;
+  return { match, tournamentId: match.tournament_id };
 }
 
 export async function getMatchByChallongeMatchIdForGuild(

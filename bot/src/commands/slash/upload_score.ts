@@ -164,6 +164,8 @@ export const uploadScoreCommand: SlashCommand = {
         guild: interaction.guild,
         channel,
         closedCategoryId: tournament.closed_ticket_category_id,
+        tournament,
+        guildConfig,
       });
 
       await interaction.editReply({
@@ -195,7 +197,7 @@ export const uploadScoreCommand: SlashCommand = {
           winnerSide,
           score1,
           score2,
-          note,
+          ticketChannelId: match.ticket_channel_id,
         });
       }
 

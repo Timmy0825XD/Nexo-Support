@@ -171,6 +171,13 @@ function tournamentAddOptions(
         .setDescription('Fourth open ticket category')
         .addChannelTypes(ChannelType.GuildCategory)
         .setRequired(false),
+    )
+    .addChannelOption((option) =>
+      option
+        .setName('events_links')
+        .setDescription('Channel where match recording links are published')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setRequired(false),
     );
 }
 
@@ -281,6 +288,13 @@ function tournamentEditOptions(
       option
         .setName('auto_room_creation')
         .setDescription('Enable or disable automatic room creation')
+        .setRequired(false),
+    )
+    .addChannelOption((option) =>
+      option
+        .setName('events_links')
+        .setDescription('Channel where match recording links are published')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(false),
     );
 }

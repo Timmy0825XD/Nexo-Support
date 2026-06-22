@@ -14,14 +14,19 @@ import {
   findTicketByChannel,
   getTicketChannel,
   reopenTicketChannel,
+  resolveOpenTicketMemberIds,
   resolveTicketClosedState,
 } from '../../services/tickets.js';
+import { getMatchById } from '../../services/matches.js';
+import { getTournamentById } from '../../services/tournaments.js';
+import { archiveValidationTranscript } from '../../services/transcripts.js';
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
+import { parseValidationTicketTopic } from '../../utils/validation-ticket.js';
 
 export const ticketCommand: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName('ticket')
-    .setDescription('Match ticket management')
+    .setDescription('Match and support ticket management')
     .setDefaultMemberPermissions(null)
     .addSubcommand((sub) =>
       sub.setName('close').setDescription('Close the current match ticket'),
@@ -31,6 +36,11 @@ export const ticketCommand: SlashCommand = {
     )
     .addSubcommand((sub) =>
       sub.setName('delete').setDescription('Permanently delete the current match ticket channel'),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('transcript')
+        .setDescription('Archive and delete a role validation support ticket'),
     ),
 
   async execute(interaction, { supabase }) {
@@ -74,6 +84,61 @@ export const ticketCommand: SlashCommand = {
       return;
     }
 
+    const subcommand = interaction.options.getSubcommand();
+    const validationTicket = parseValidationTicketTopic(textChannel.topic);
+
+    if (subcommand === 'transcript') {
+      if (!validationTicket) {
+        await interaction.editReply({
+          embeds: [
+            errorEmbed(
+              'Invalid Ticket',
+              'This command only works inside role validation support ticket channels.',
+            ),
+          ],
+        });
+        return;
+      }
+
+      try {
+        await archiveValidationTranscript({
+          guild: interaction.guild,
+          channel: textChannel,
+          guildConfig,
+          teamLabel: validationTicket.teamLabel,
+          transcriptChannelId: validationTicket.transcriptChannelId,
+        });
+
+        await interaction.editReply({
+          embeds: [
+            successEmbed(
+              'Ticket Transcribed',
+              '✅ Transcript archived and the support ticket will be deleted.',
+            ),
+          ],
+        });
+
+        await textChannel.delete('Role validation ticket transcribed by organiser');
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to archive validation ticket transcript.';
+        await interaction.editReply({ embeds: [errorEmbed('Transcript Error', message)] });
+      }
+      return;
+    }
+
+    if (validationTicket) {
+      await interaction.editReply({
+        embeds: [
+          errorEmbed(
+            'Support Ticket',
+            'Use `/ticket transcript` to archive and close this role validation support ticket.',
+          ),
+        ],
+      });
+      return;
+    }
+
     try {
       const context = await findTicketByChannel(
         supabase,
@@ -95,7 +160,26 @@ export const ticketCommand: SlashCommand = {
       }
 
       const isClosed = resolveTicketClosedState(textChannel, context.closedCategoryId);
-      const subcommand = interaction.options.getSubcommand();
+
+      const tournament = await getTournamentById(
+        supabase,
+        interaction.guild.id,
+        context.matchRoom.tournament_id,
+      );
+      if (!tournament) {
+        await interaction.editReply({
+          embeds: [errorEmbed('Tournament Not Found', 'The linked tournament no longer exists.')],
+        });
+        return;
+      }
+
+      const match = await getMatchById(supabase, tournament.id, context.match.id);
+      if (!match) {
+        await interaction.editReply({
+          embeds: [errorEmbed('Match Not Found', 'The linked match no longer exists.')],
+        });
+        return;
+      }
 
       if (subcommand === 'close') {
         if (isClosed) {
@@ -105,7 +189,13 @@ export const ticketCommand: SlashCommand = {
           return;
         }
 
-        await closeTicketChannel(interaction.guild, textChannel, context.closedCategoryId);
+        await closeTicketChannel({
+          guild: interaction.guild,
+          channel: textChannel,
+          closedCategoryId: context.closedCategoryId,
+          tournament,
+          guildConfig,
+        });
         await interaction.editReply({
           embeds: [successEmbed('Ticket Closed', '✅ Ticket closed successfully.')],
         });
@@ -143,7 +233,21 @@ export const ticketCommand: SlashCommand = {
           return;
         }
 
-        await reopenTicketChannel(interaction.guild, textChannel, context.openCategoryId);
+        const participantMemberIds = await resolveOpenTicketMemberIds({
+          supabase,
+          ticketChannelId: textChannel.id,
+          tournament,
+          match,
+        });
+
+        await reopenTicketChannel({
+          guild: interaction.guild,
+          channel: textChannel,
+          openCategoryId: context.openCategoryId,
+          tournament,
+          guildConfig,
+          participantMemberIds,
+        });
         await interaction.editReply({
           embeds: [successEmbed('Ticket Reopened', '✅ Ticket reopened successfully.')],
         });

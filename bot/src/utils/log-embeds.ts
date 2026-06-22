@@ -4,6 +4,7 @@ import type { GuildSettingsEdit } from '../schemas/guild-settings.js';
 import type { StaffConfigEdit } from '../schemas/staff-config.js';
 import { embedField } from './embeds.js';
 import { formatChannel, formatRole, formatUserFromUser } from './guild-display.js';
+import { escapeDiscordMarkdown, formatEmphasizedName } from './match-formatting.js';
 
 const SETTINGS_FIELD_LABELS: Record<keyof GuildSettingsEdit, string> = {
   admin_role_id: 'Admin Role',
@@ -34,6 +35,10 @@ const STAFF_FIELD_LABELS: Record<keyof StaffConfigEdit, string> = {
 
 function formatUser(user: User): string {
   return formatUserFromUser(user);
+}
+
+function applyUserThumbnail(embed: EmbedBuilder, user: User): EmbedBuilder {
+  return embed.setThumbnail(user.displayAvatarURL({ size: 256 }));
 }
 
 function formatSettingsValue(guild: Guild, key: keyof GuildSettingsEdit, value: string): string {
@@ -95,7 +100,7 @@ export function buildSettingsConfigLogEmbed(
 
   embed.addFields(embedField('UTC Time', `<t:${Math.floor(Date.now() / 1000)}:F>`, false));
 
-  return embed;
+  return applyUserThumbnail(embed, triggeredBy);
 }
 
 export function buildStaffConfigLogEmbed(
@@ -130,13 +135,14 @@ export function buildStaffConfigLogEmbed(
 
   embed.addFields(embedField('UTC Time', `<t:${Math.floor(Date.now() / 1000)}:F>`, false));
 
-  return embed;
+  return applyUserThumbnail(embed, triggeredBy);
 }
 
 export function buildBotEventLogEmbed(
   title: string,
   fields: Array<{ name: string; value: string; inline?: boolean }>,
   color: number = LOG_COLORS.bot,
+  triggeredBy?: User,
 ) {
   const embed = new EmbedBuilder().setColor(color).setTitle(title).setTimestamp();
 
@@ -146,12 +152,130 @@ export function buildBotEventLogEmbed(
 
   embed.addFields(embedField('UTC Time', `<t:${Math.floor(Date.now() / 1000)}:F>`, false));
 
+  if (triggeredBy) {
+    applyUserThumbnail(embed, triggeredBy);
+  }
+
   return embed;
+}
+
+export function formatChallongeLogDateTime(date: Date = new Date()): string {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
+export function buildChallongeTournamentLink(tournamentName: string, challongeId: string): string {
+  const label = escapeDiscordMarkdown(tournamentName.trim());
+  const slug = encodeURIComponent(challongeId.trim());
+  return `[${label}](https://challonge.com/${slug})`;
+}
+
+function buildChallongeDetailsDescription(
+  intro: string,
+  lines: string[],
+  triggeredBy: User,
+  occurredAt: Date = new Date(),
+): string {
+  return [
+    intro,
+    ...lines,
+    `**Date & Time:** ${formatChallongeLogDateTime(occurredAt)}`,
+    `**Triggered By:** ${formatUserFromUser(triggeredBy)}`,
+  ].join('\n');
 }
 
 export function buildChallongeLogEmbed(
   title: string,
-  fields: Array<{ name: string; value: string; inline?: boolean }>,
-) {
-  return buildBotEventLogEmbed(title, fields, LOG_COLORS.challonge);
+  description: string,
+  triggeredBy: User,
+): EmbedBuilder {
+  return applyUserThumbnail(
+    new EmbedBuilder()
+      .setColor(LOG_COLORS.challonge)
+      .setTitle(title)
+      .setDescription(description)
+      .setTimestamp(),
+    triggeredBy,
+  );
+}
+
+export function buildChallongeMatchUpdatedLogEmbed(params: {
+  guild: Guild;
+  tournamentName: string;
+  challongeId: string;
+  matchLabel: string;
+  ticketChannelId: string | null;
+  scoreLine: string;
+  winnerName: string;
+  triggeredBy: User;
+  occurredAt?: Date;
+}): EmbedBuilder {
+  const channelLine = params.ticketChannelId
+    ? formatChannel(params.guild, params.ticketChannelId)
+    : '*No ticket channel*';
+
+  const description = buildChallongeDetailsDescription(
+    'The match has been updated with the following details:',
+    [
+      `**Tournament:** ${buildChallongeTournamentLink(params.tournamentName, params.challongeId)}`,
+      `**Match:** ${params.matchLabel}`,
+      `**Channel:** ${channelLine}`,
+      `**Score:** ${params.scoreLine}`,
+      `**Winner:** ${formatEmphasizedName(params.winnerName)}`,
+    ],
+    params.triggeredBy,
+    params.occurredAt,
+  );
+
+  return buildChallongeLogEmbed(
+    ':white_check_mark: Match Updated Successfully',
+    description,
+    params.triggeredBy,
+  );
+}
+
+export function buildChallongeTournamentLinkedLogEmbed(params: {
+  tournamentName: string;
+  challongeId: string;
+  triggeredBy: User;
+  occurredAt?: Date;
+}): EmbedBuilder {
+  const description = buildChallongeDetailsDescription(
+    'The tournament has been linked to Challonge with the following details:',
+    [
+      `**Tournament:** ${buildChallongeTournamentLink(params.tournamentName, params.challongeId)}`,
+      `**Challonge ID:** \`${params.challongeId}\``,
+    ],
+    params.triggeredBy,
+    params.occurredAt,
+  );
+
+  return buildChallongeLogEmbed(
+    ':white_check_mark: Tournament Linked to Challonge',
+    description,
+    params.triggeredBy,
+  );
+}
+
+export function buildChallongeCredentialsUpdatedLogEmbed(params: {
+  tournamentName: string;
+  challongeId: string;
+  triggeredBy: User;
+  occurredAt?: Date;
+}): EmbedBuilder {
+  const description = buildChallongeDetailsDescription(
+    'The tournament Challonge credentials were updated with the following details:',
+    [
+      `**Tournament:** ${buildChallongeTournamentLink(params.tournamentName, params.challongeId)}`,
+      `**Challonge ID:** \`${params.challongeId}\``,
+    ],
+    params.triggeredBy,
+    params.occurredAt,
+  );
+
+  return buildChallongeLogEmbed(':key: Tournament Credentials Updated', description, params.triggeredBy);
 }

@@ -5,7 +5,16 @@ import {
   type TextChannel,
 } from 'discord.js';
 import type { GuildRow } from '../types/guild.js';
+import type { MatchListRow } from '../types/match.js';
+import type { TournamentRow } from '../types/tournament.js';
+import { getActiveAssignments } from '../guards/schedule-permissions.js';
 import { getMatchByChallongeMatchIdForGuild } from './matches.js';
+import { getScheduleAssignments, getScheduleForTicket } from './schedules.js';
+import { resolveScheduleMatchCaptains } from './schedule-results.js';
+import {
+  applyClosedTicketPermissions,
+  applyOpenTicketPermissions,
+} from '../utils/ticket-permissions.js';
 
 export interface MatchRoomRow {
   id: string;
@@ -203,36 +212,64 @@ export function resolveTicketClosedState(
   return channel.parentId === closedCategoryId;
 }
 
-export async function closeTicketChannel(
-  guild: Guild,
-  channel: TextChannel,
-  closedCategoryId: string,
-): Promise<void> {
-  await channel.setParent(closedCategoryId, { lockPermissions: false });
-  await channel.permissionOverwrites.edit(guild.id, {
-    SendMessages: false,
-    AddReactions: false,
+export async function resolveOpenTicketMemberIds(params: {
+  supabase: SupabaseClient;
+  ticketChannelId: string;
+  tournament: Pick<TournamentRow, 'sheet_link'>;
+  match: Pick<MatchListRow, 'team1_name' | 'team2_name'>;
+}): Promise<string[]> {
+  const memberIds = new Set<string>();
+
+  const captains = await resolveScheduleMatchCaptains(params.tournament, params.match);
+  if (captains.team1CaptainId) memberIds.add(captains.team1CaptainId);
+  if (captains.team2CaptainId) memberIds.add(captains.team2CaptainId);
+
+  const schedule = await getScheduleForTicket(params.supabase, params.ticketChannelId);
+  if (schedule) {
+    const assignments = await getScheduleAssignments(params.supabase, schedule.id);
+    for (const assignment of getActiveAssignments(assignments)) {
+      memberIds.add(assignment.discord_user_id);
+    }
+  }
+
+  return [...memberIds];
+}
+
+export async function closeTicketChannel(params: {
+  guild: Guild;
+  channel: TextChannel;
+  closedCategoryId: string;
+  tournament: Pick<TournamentRow, 'admin_role_id' | 'helper_role_id'>;
+  guildConfig: GuildRow | null;
+}): Promise<void> {
+  await params.channel.setParent(params.closedCategoryId, { lockPermissions: false });
+  await applyClosedTicketPermissions({
+    channel: params.channel,
+    guild: params.guild,
+    tournament: params.tournament,
+    guildConfig: params.guildConfig,
   });
 }
 
-export async function reopenTicketChannel(
-  guild: Guild,
-  channel: TextChannel,
-  openCategoryId: string,
-): Promise<void> {
-  if (openCategoryId) {
-    await channel.setParent(openCategoryId, { lockPermissions: false });
+export async function reopenTicketChannel(params: {
+  guild: Guild;
+  channel: TextChannel;
+  openCategoryId: string;
+  tournament: Pick<TournamentRow, 'admin_role_id' | 'helper_role_id' | 'sheet_link'>;
+  guildConfig: GuildRow | null;
+  participantMemberIds: string[];
+}): Promise<void> {
+  if (params.openCategoryId) {
+    await params.channel.setParent(params.openCategoryId, { lockPermissions: false });
   }
 
-  const everyoneOverwrite = channel.permissionOverwrites.cache.get(guild.id);
-  if (everyoneOverwrite) {
-    await everyoneOverwrite.delete().catch(() => undefined);
-  } else {
-    await channel.permissionOverwrites.edit(guild.id, {
-      SendMessages: null,
-      AddReactions: null,
-    });
-  }
+  await applyOpenTicketPermissions({
+    channel: params.channel,
+    guild: params.guild,
+    tournament: params.tournament,
+    guildConfig: params.guildConfig,
+    participantMemberIds: params.participantMemberIds,
+  });
 }
 
 export async function clearTicketRecords(
@@ -269,6 +306,8 @@ export async function finalizeMatchTicket(params: {
   guild: Guild;
   channel: TextChannel;
   closedCategoryId: string;
+  tournament: Pick<TournamentRow, 'admin_role_id' | 'helper_role_id'>;
+  guildConfig: GuildRow | null;
 }): Promise<TextChannel> {
   const baseName = stripStatusPrefix(params.channel.name);
   const completedName = `✅${baseName}`.slice(0, 100);
@@ -277,6 +316,6 @@ export async function finalizeMatchTicket(params: {
     await params.channel.setName(completedName, 'Match completed');
   }
 
-  await closeTicketChannel(params.guild, params.channel, params.closedCategoryId);
+  await closeTicketChannel(params);
   return params.channel;
 }

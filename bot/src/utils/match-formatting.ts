@@ -13,15 +13,40 @@ export function formatScoreValue(score: number): string {
   return `\`${score}\``;
 }
 
-/** Single-line matchup title. */
+/** Uppercase embed title for matchups (schedule, attendance, results). */
+export function formatMatchEmbedTitle(team1Name: string, team2Name: string): string {
+  return `${team1Name.trim().toUpperCase()} VS ${team2Name.trim().toUpperCase()}`;
+}
+
+/** Single-line matchup label without scores. */
 export function formatMatchupTitle(team1Name: string, team2Name: string): string {
-  return `${formatEmphasizedName(team1Name)} __vs__ ${formatEmphasizedName(team2Name)}`;
+  return `${formatEmphasizedName(team1Name)} VS ${formatEmphasizedName(team2Name)}`;
 }
 
 /**
- * Multi-line score block: team name and score on separate visual tokens.
- * Example: **team 2** · `3`  vs  **team 1** · `5` 🏆
+ * Standard score line: **TEAM** `3` - `2` **TEAM**
+ * Optional winnerSide adds 🏆 before the winning team name.
  */
+export function formatInlineScoreLine(params: {
+  team1Name: string;
+  team2Name: string;
+  score1: number;
+  score2: number;
+  winnerSide?: 1 | 2;
+}): string {
+  const team1 =
+    params.winnerSide === 1
+      ? `🏆 ${formatEmphasizedName(params.team1Name)}`
+      : formatEmphasizedName(params.team1Name);
+  const team2 =
+    params.winnerSide === 2
+      ? `🏆 ${formatEmphasizedName(params.team2Name)}`
+      : formatEmphasizedName(params.team2Name);
+
+  return `${team1} ${formatScoreValue(params.score1)} - ${formatScoreValue(params.score2)} ${team2}`;
+}
+
+/** @deprecated Prefer formatInlineScoreLine — kept as alias for existing call sites. */
 export function formatMatchScoreBlock(params: {
   team1Name: string;
   team2Name: string;
@@ -29,21 +54,16 @@ export function formatMatchScoreBlock(params: {
   score2: number;
   winnerSide?: 1 | 2;
 }): string {
-  const team1Prefix = params.winnerSide === 1 ? '🏆 ' : '';
-  const team2Prefix = params.winnerSide === 2 ? '🏆 ' : '';
-
-  const line1 = `${team1Prefix}${formatEmphasizedName(params.team1Name)} · ${formatScoreValue(params.score1)}`;
-  const line2 = `${team2Prefix}${formatEmphasizedName(params.team2Name)} · ${formatScoreValue(params.score2)}`;
-
-  return `${line1}\n__—— VS ——__\n${line2}`;
+  return formatInlineScoreLine(params);
 }
 
-/** Compact score for log fields. */
+/** Compact score line — same layout as formatInlineScoreLine. */
 export function formatCompactScoreLine(params: {
   team1Name: string;
   team2Name: string;
   score1: number;
   score2: number;
+  winnerSide?: 1 | 2;
 }): string {
-  return `${formatEmphasizedName(params.team1Name)} ${formatScoreValue(params.score1)} __–__ ${formatScoreValue(params.score2)} ${formatEmphasizedName(params.team2Name)}`;
+  return formatInlineScoreLine(params);
 }

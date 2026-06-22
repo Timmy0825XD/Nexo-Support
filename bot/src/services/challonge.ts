@@ -60,6 +60,7 @@ interface ChallongeParticipant {
   id?: number;
   name?: string;
   display_name?: string;
+  seed?: number | null;
   group_id?: number | null;
   group_player_ids?: number[];
 }
@@ -374,6 +375,34 @@ export async function fetchChallongeTournamentSummary(
 ): Promise<ChallongeTournamentSummary> {
   const tournament = await fetchChallongeTournamentPayload(challongeId, apiKey);
   return buildTournamentSummary(tournament);
+}
+
+function normalizeChallongeParticipantName(name: string): string {
+  return name
+    .trim()
+    .replace(/^@+/, '')
+    .replace(/\.+$/, '')
+    .toLowerCase();
+}
+
+export async function fetchChallongeParticipantSeeds(
+  challongeId: string,
+  apiKey: string,
+): Promise<Map<string, number>> {
+  const tournament = await fetchChallongeTournamentPayload(challongeId, apiKey);
+  const seeds = new Map<string, number>();
+
+  for (const entry of tournament.participants ?? []) {
+    const participant = entry.participant;
+    if (!participant || participant.seed == null) continue;
+
+    const name = (participant.display_name ?? participant.name ?? '').trim();
+    if (!name) continue;
+
+    seeds.set(normalizeChallongeParticipantName(name), participant.seed);
+  }
+
+  return seeds;
 }
 export async function verifyChallongeCredentials(
   challongeId: string,
