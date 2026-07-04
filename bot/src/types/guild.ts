@@ -22,7 +22,6 @@ export interface GuildRow {
   staff_announcement_channel_id: string | null;
   staff_instructions_channel_id: string | null;
   staff_details_channel_id: string | null;
-  event_rules_channel_id: string | null;
   created_at: string;
   updated_at: string;
 }
