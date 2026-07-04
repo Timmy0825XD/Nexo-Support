@@ -12,18 +12,18 @@ export const ISSUE_SECTIONS: Array<{
   title: string;
   buttonLabel: string;
 }> = [
-  { code: 'banned_game_id', title: 'Banned In-game IDs', buttonLabel: '🚫 Banned IDs' },
-  { code: 'duplicate_discord_id', title: 'Duplicate Discord IDs', buttonLabel: '👥 Dup Discord' },
+  { code: 'banned_game_id', title: 'Banned In-game IDs', buttonLabel: `${CUSTOM_EMOJIS.error} Banned IDs` },
+  { code: 'duplicate_discord_id', title: 'Duplicate Discord IDs', buttonLabel: `${CUSTOM_EMOJIS.team_member} Dup Discord` },
   { code: 'duplicate_game_id', title: 'Duplicate In-game IDs', buttonLabel: '🎮 Dup Game ID' },
-  { code: 'discord_account_too_new', title: 'Discord Account Age', buttonLabel: '📅 Account Age' },
-  { code: 'invalid_discord_id', title: 'Invalid Discord IDs', buttonLabel: '❌ Bad Discord' },
+  { code: 'discord_account_too_new', title: 'Discord Account Age', buttonLabel: `${CUSTOM_EMOJIS.schedule} Account Age` },
+  { code: 'invalid_discord_id', title: 'Invalid Discord IDs', buttonLabel: `${CUSTOM_EMOJIS.error} Bad Discord` },
   { code: 'discord_id_from_tag', title: 'Discord ID Resolved from Tag', buttonLabel: '🔍 ID from Tag' },
-  { code: 'invalid_game_id', title: 'Invalid In-game IDs', buttonLabel: '❌ Bad Game ID' },
-  { code: 'missing_discord_id', title: 'Missing Discord IDs', buttonLabel: '⚠️ No Discord' },
-  { code: 'missing_game_id', title: 'Missing In-game IDs', buttonLabel: '⚠️ No Game ID' },
-  { code: 'missing_discord_tag', title: 'Missing Discord Tags', buttonLabel: '⚠️ No Tag' },
+  { code: 'invalid_game_id', title: 'Invalid In-game IDs', buttonLabel: `${CUSTOM_EMOJIS.error} Bad Game ID` },
+  { code: 'missing_discord_id', title: 'Missing Discord IDs', buttonLabel: `${CUSTOM_EMOJIS.alert} No Discord` },
+  { code: 'missing_game_id', title: 'Missing In-game IDs', buttonLabel: `${CUSTOM_EMOJIS.alert} No Game ID` },
+  { code: 'missing_discord_tag', title: 'Missing Discord Tags', buttonLabel: `${CUSTOM_EMOJIS.alert} No Tag` },
   { code: 'not_in_server', title: 'Not in Server', buttonLabel: '🚪 Not in Server' },
-  { code: 'staff_role', title: 'Staff / Judge / Recorder Roles', buttonLabel: '👔 Staff Role' },
+  { code: 'staff_role', title: 'Staff / Judge / Recorder Roles', buttonLabel: `${CUSTOM_EMOJIS.medal} Staff Role` },
   { code: 'tag_mismatch', title: 'Tag Mismatches', buttonLabel: '🏷️ Tag Mismatch' },
 ];
 
@@ -81,7 +81,7 @@ function buildSummaryDescription(result: SheetValidationResult): string {
     '**Issues by category:**',
     sectionCounts.join('\n'),
     '',
-    'Use **◀ ▶** to browse each section. The full report is attached as `.txt`.',
+    `Use ${CUSTOM_EMOJIS.back} ${CUSTOM_EMOJIS.next} to browse each section. The full report is attached as \`.txt\`.`,
   ].join('\n');
 }
 
@@ -89,7 +89,7 @@ export function buildSheetValidationPages(result: SheetValidationResult): SheetV
   const pages: SheetValidationPage[] = [
     {
       title: result.passed ? 'Sheet Validation Passed' : 'Sheet Validation Failed',
-      buttonLabel: '📋 Summary',
+      buttonLabel: `${CUSTOM_EMOJIS.details} Summary`,
       description: buildSummaryDescription(result),
       color: result.passed ? EMBED_COLORS.success : EMBED_COLORS.error,
     },

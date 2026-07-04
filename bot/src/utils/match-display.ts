@@ -1,6 +1,6 @@
 import type { Guild } from 'discord.js';
-import type { CreateRoomsResult } from '../services/match-rooms.js';
-import { embedField, successEmbed } from './embeds.js';
+import type { CreateRoomsResult, RepairedRoomResult } from '../services/match-rooms.js';
+import { CUSTOM_EMOJIS, embedField, successEmbed } from './embeds.js';
 import { formatChannel } from './guild-display.js';
 import {
   formatCompactScoreLine,
@@ -22,13 +22,13 @@ export function buildRoomsCreatedEmbed(
       ? `These **tickets have been Successfully Created**\n${createdLines}`
       : '*No new tickets were created.*',
     result.skipped.length > 0
-      ? `\n⏭️ Skipped **${result.skipped.length}** match(es) that already had a room.`
+      ? `\n${CUSTOM_EMOJIS.skip} Skipped **${result.skipped.length}** match(es) that already had a room.`
       : '',
     result.warnings.length > 0
-      ? `\n⚠️ *Warnings:*\n${result.warnings.map((warning) => `- ${warning}`).join('\n')}`
+      ? `\n${CUSTOM_EMOJIS.warning} *Warnings:*\n${result.warnings.map((warning) => `- ${warning}`).join('\n')}`
       : '',
     result.errors.length > 0
-      ? `\n❌ *Errors:*\n${result.errors.map((error) => `- ${error}`).join('\n')}`
+      ? `\n${CUSTOM_EMOJIS.error} *Errors:*\n${result.errors.map((error) => `- ${error}`).join('\n')}`
       : '',
   ]
     .filter(Boolean)
@@ -51,7 +51,7 @@ export function buildScoreUploadedEmbed(params: {
 }) {
   const winnerName = params.winnerSide === 1 ? params.team1Name : params.team2Name;
   const descriptionLines = [
-    '✅ *Resultado subido correctamente a Challonge.*',
+    `${CUSTOM_EMOJIS.done} *Resultado subido correctamente a Challonge.*`,
     params.archiveChannelLine,
   ].filter(Boolean);
 
@@ -68,7 +68,7 @@ export function buildScoreUploadedEmbed(params: {
       }),
       false,
     ),
-    embedField('Ganador', `🏆 ${formatEmphasizedName(winnerName)}`, true),
+    embedField('Ganador', `${CUSTOM_EMOJIS.trophy} ${formatEmphasizedName(winnerName)}`, true),
   ];
 
   if (params.matchGroup) {
@@ -97,6 +97,7 @@ export function buildBracketCorrectedEmbed(params: {
   oldScore2: number | null;
   newScore1: number;
   newScore2: number;
+  repairedRooms?: RepairedRoomResult;
 }) {
   const oldLine =
     params.oldScore1 != null && params.oldScore2 != null
@@ -115,20 +116,40 @@ export function buildBracketCorrectedEmbed(params: {
     score2: params.newScore2,
   });
 
-  return successEmbed(
+  const embed = successEmbed(
     'Bracket Corrected',
-    `✅ *Marcador actualizado en Challonge.*\n${formatMatchupTitle(params.team1Name, params.team2Name)}`,
+    `${CUSTOM_EMOJIS.done} *Marcador actualizado en Challonge.*\n${formatMatchupTitle(params.team1Name, params.team2Name)}`,
   ).addFields(
     embedField('Marcador anterior', oldLine, false),
     embedField('Marcador nuevo', newLine, false),
   );
+
+  if (params.repairedRooms && params.repairedRooms.deleted.length > 0) {
+    embed.addFields(
+      embedField(
+        'Salas reparadas',
+        [
+          `Eliminadas: **${params.repairedRooms.deleted.length}**`,
+          `Recreadas: **${params.repairedRooms.created.length}**`,
+          params.repairedRooms.errors.length > 0
+            ? `Errores: **${params.repairedRooms.errors.length}**`
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        false,
+      ),
+    );
+  }
+
+  return embed;
 }
 
 export function buildAutoRoomStatusEmbed(enabled: boolean, tournamentName: string) {
   return successEmbed(
     enabled ? 'Auto Room Enabled' : 'Auto Room Disabled',
     enabled
-      ? `✅ *Creación automática activada* para ${formatEmphasizedName(tournamentName)}.`
-      : `⏹️ *Creación automática desactivada* para ${formatEmphasizedName(tournamentName)}.`,
+      ? `${CUSTOM_EMOJIS.done} *Creación automática activada* para ${formatEmphasizedName(tournamentName)}.`
+      : `${CUSTOM_EMOJIS.stop} *Creación automática desactivada* para ${formatEmphasizedName(tournamentName)}.`,
   );
 }

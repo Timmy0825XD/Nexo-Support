@@ -8,6 +8,10 @@ import { ChallongeError, getChallongeCredentials, reportMatchScore } from '../..
 import { getGuildConfig } from '../../services/guilds.js';
 import { logBracketCorrected } from '../../services/guild-logs.js';
 import {
+  listOpenMatchRoomSnapshots,
+  repairChangedMatchRooms,
+} from '../../services/match-rooms.js';
+import {
   getChallongeMatchMeta,
   getMatchById,
   recordBracketCorrection,
@@ -110,6 +114,7 @@ export const correctBracketCommand: SlashCommand = {
     try {
       const credentials = getChallongeCredentials(tournament);
       const challongeMeta = await getChallongeMatchMeta(tournament, match.challonge_match_id);
+      const roomSnapshot = await listOpenMatchRoomSnapshots(supabase, tournament.id);
 
       await recordBracketCorrection(supabase, {
         tournamentId: tournament.id,
@@ -138,8 +143,14 @@ export const correctBracketCommand: SlashCommand = {
         winnerSide,
       });
       await syncMatchesFromChallonge(supabase, tournament);
+      const roomRepair = await repairChangedMatchRooms({
+        guild: interaction.guild,
+        supabase,
+        tournament,
+        guildConfig,
+        beforeMatches: roomSnapshot,
+      });
 
-      const matchLabel = `${match.team1_name} vs ${match.team2_name}`;
       await interaction.editReply({
         embeds: [
           buildBracketCorrectedEmbed({
@@ -149,6 +160,7 @@ export const correctBracketCommand: SlashCommand = {
             oldScore2: match.team2_score,
             newScore1: score1,
             newScore2: score2,
+            repairedRooms: roomRepair,
           }),
         ],
       });

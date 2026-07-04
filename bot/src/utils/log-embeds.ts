@@ -29,7 +29,6 @@ const STAFF_FIELD_LABELS: Record<keyof StaffConfigEdit, string> = {
   staff_announcement_channel_id: 'Staff Announcements',
   staff_instructions_channel_id: 'Staff Instructions',
   staff_details_channel_id: 'Staff Details',
-  event_rules_channel_id: 'Event Rules',
 };
 
 

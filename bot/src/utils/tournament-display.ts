@@ -30,6 +30,20 @@ const EDIT_FIELD_LABELS: Record<TournamentEditFieldKey, string> = {
   auto_room_enabled: 'Auto Room Creation',
 };
 
+const TOURNAMENT_FIELD_LABELS = {
+  attendanceChannel: `${CUSTOM_EMOJIS.medal} Attendance Channel`,
+  rulesChannel: `${CUSTOM_EMOJIS.rules} Rules Channel`,
+  transcriptChannel: `${CUSTOM_EMOJIS.transcript} Transcript Channel`,
+  closedTicketCategories: `${CUSTOM_EMOJIS.ticket} Closed Ticket Categories`,
+  resultChannel: `${CUSTOM_EMOJIS.trophy} Result Channel`,
+  eventsLinksChannel: `${CUSTOM_EMOJIS.link} Events Links Channel`,
+  sheetLink: `${CUSTOM_EMOJIS.sheets} Sheet Link`,
+  adminRole: `${CUSTOM_EMOJIS.role} Admin Role`,
+  helperRole: `${CUSTOM_EMOJIS.utility} Helper Role`,
+  autoRoomCreation: `${CUSTOM_EMOJIS.settings} Auto Room Creation`,
+  openTicketCategories: `${CUSTOM_EMOJIS.ticket} Open Ticket Categories`,
+} as const;
+
 function formatEditValue(guild: Guild, key: TournamentEditFieldKey, value: unknown): string {
   if (typeof value === 'boolean') {
     return value ? 'Enabled' : 'Disabled';
@@ -78,44 +92,44 @@ function tournamentSummaryFields(
       true,
     ),
     embedField(
-      '📋 Attendance Channel',
+      TOURNAMENT_FIELD_LABELS.attendanceChannel,
       formatChannel(guild, tournament.attendance_channel_id),
       true,
     ),
-    embedField('📒 Rules Channel', formatChannel(guild, tournament.rules_channel_id), true),
+    embedField(TOURNAMENT_FIELD_LABELS.rulesChannel, formatChannel(guild, tournament.rules_channel_id), true),
     embedField(
-      '📚 Transcript Channel',
+      TOURNAMENT_FIELD_LABELS.transcriptChannel,
       formatChannel(guild, tournament.transcript_channel_id),
       true,
     ),
-    embedField('🗂️ Closed Ticket Categories', formatClosedCategories(guild, tournament), false),
+    embedField(TOURNAMENT_FIELD_LABELS.closedTicketCategories, formatClosedCategories(guild, tournament), false),
     embedField(
-      '🏁 Result Channel',
+      TOURNAMENT_FIELD_LABELS.resultChannel,
       tournament.result_channel_id
         ? formatChannel(guild, tournament.result_channel_id)
         : 'Using default from settings',
       false,
     ),
     embedField(
-      '🔗 Events Links Channel',
+      TOURNAMENT_FIELD_LABELS.eventsLinksChannel,
       tournament.events_links_channel_id
         ? formatChannel(guild, tournament.events_links_channel_id)
         : 'Not configured',
       false,
     ),
     embedField(
-      '📄 Sheet Link',
+      TOURNAMENT_FIELD_LABELS.sheetLink,
       `[Click Here](${tournament.sheet_link})`,
       false,
     ),
-    embedField('👑 Admin Role', formatRole(guild, tournament.admin_role_id), true),
-    embedField('🛠️ Helper Role', formatRole(guild, tournament.helper_role_id), true),
+    embedField(TOURNAMENT_FIELD_LABELS.adminRole, formatRole(guild, tournament.admin_role_id), true),
+    embedField(TOURNAMENT_FIELD_LABELS.helperRole, formatRole(guild, tournament.helper_role_id), true),
     embedField(
-      '⚙️ Auto Room Creation',
+      TOURNAMENT_FIELD_LABELS.autoRoomCreation,
       tournament.auto_room_enabled ? 'Enabled' : 'Disabled',
       true,
     ),
-    embedField('🎫 Open Ticket Categories', formatOpenCategories(guild, tournament), false),
+    embedField(TOURNAMENT_FIELD_LABELS.openTicketCategories, formatOpenCategories(guild, tournament), false),
   ];
 }
 
@@ -125,7 +139,7 @@ export function buildTournamentAddEmbed(
   challongeSummary?: ChallongeTournamentSummary | null,
 ) {
   return successEmbed(
-    `🏆 Tournament Created: ${tournament.name}`,
+    `${CUSTOM_EMOJIS.trophy} Tournament Created: ${tournament.name}`,
     'A new tournament has been registered on this server.',
   ).addFields(tournamentSummaryFields(guild, tournament, challongeSummary));
 }
@@ -147,7 +161,7 @@ export function buildTournamentEditEmbed(
 
   return successEmbed(
     `Tournament Updated: ${tournament.name}`,
-    '✅ Tournament updated successfully.',
+    `${CUSTOM_EMOJIS.done} Tournament updated successfully.`,
   ).addFields(
     embedField('Tournament ID', tournament.id, false),
     embedField(
@@ -166,7 +180,7 @@ export function buildTournamentInfoEmbed(
 ) {
   return new EmbedBuilder()
     .setColor(EMBED_COLORS.info)
-    .setTitle(`🏆 Tournament Configuration: ${tournament.name}`)
+    .setTitle(`${CUSTOM_EMOJIS.trophy} Tournament Configuration: ${tournament.name}`)
     .setDescription('Current tournament setup and integration status.')
     .addFields(tournamentSummaryFields(guild, tournament, challongeSummary))
     .setTimestamp();
@@ -176,7 +190,7 @@ export function buildTournamentListEmbed(guild: Guild, tournaments: TournamentLi
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.info)
     .setTitle('Registered Tournaments')
-    .setDescription('✅ Tournament list retrieved successfully.')
+    .setDescription(`${CUSTOM_EMOJIS.done} Tournament list retrieved successfully.`)
     .setTimestamp();
 
   if (tournaments.length === 0) {

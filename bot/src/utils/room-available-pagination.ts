@@ -7,6 +7,7 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { CUSTOM_EMOJIS, EMBED_COLORS } from '../constants/emojis.js';
+import { applyPaginationBackButton, applyPaginationNextButton } from './pagination-buttons.js';
 import type { MatchListRow } from '../types/match.js';
 import { escapeDiscordMarkdown } from './match-formatting.js';
 
@@ -33,7 +34,7 @@ function formatPlainMatchup(team1Name: string, team2Name: string): string {
 
 function formatMatchBlock(match: MatchListRow, index: number): string {
   return [
-    `🆚 **Match ${index + 1}**`,
+    `${CUSTOM_EMOJIS.vs} **Match ${index + 1}**`,
     `*${formatMatchStageLabel(match)}*`,
     formatPlainMatchup(match.team1_name, match.team2_name),
   ].join('\n');
@@ -107,16 +108,20 @@ export function buildAvailableMatchesComponents(
   const totalPages = Math.max(1, Math.ceil(totalMatches / ROOM_AVAILABLE_PAGE_SIZE));
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(ROOM_PREV_ID)
-      .setStyle(ButtonStyle.Success)
-      .setLabel('Previous')
-      .setDisabled(locked || pageIndex <= 0),
-    new ButtonBuilder()
-      .setCustomId(ROOM_NEXT_ID)
-      .setStyle(ButtonStyle.Success)
-      .setLabel('Next')
-      .setDisabled(locked || pageIndex >= totalPages - 1),
+    applyPaginationBackButton(
+      new ButtonBuilder()
+        .setCustomId(ROOM_PREV_ID)
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(locked || pageIndex <= 0),
+      'Previous',
+    ),
+    applyPaginationNextButton(
+      new ButtonBuilder()
+        .setCustomId(ROOM_NEXT_ID)
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(locked || pageIndex >= totalPages - 1),
+      'Next',
+    ),
   );
 }
 

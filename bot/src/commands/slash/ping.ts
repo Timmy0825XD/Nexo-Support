@@ -29,19 +29,18 @@ export const pingCommand: SlashCommand = {
 
     const embed = infoEmbed('Pong!', statusLine)
       .setColor(allHealthy ? EMBED_COLORS.success : EMBED_COLORS.warning)
+      .setThumbnail(interaction.client.user?.displayAvatarURL({ size: 256 }) ?? null)
       .addFields(
-        embedField(`${CUSTOM_EMOJIS.botPing} Bot Latency`, `\`${botLatency}ms\``, false),
-        embedField(`${CUSTOM_EMOJIS.webSocket} WebSocket`, `\`${wsPing}ms\``, false),
-        embedField(`${CUSTOM_EMOJIS.latency} Database Latency`, `\`${dbLatency}ms\``, false),
+        embedField(`${CUSTOM_EMOJIS.botPing} Bot Latency`, `\`${botLatency}ms\``),
+        embedField(`${CUSTOM_EMOJIS.webSocket} WebSocket`, `\`${wsPing}ms\``),
+        embedField(`${CUSTOM_EMOJIS.latency} Database Latency`, `\`${dbLatency}ms\``),
         embedField(
           `${dbOk ? CUSTOM_EMOJIS.database : CUSTOM_EMOJIS.error} Database`,
           dbOk ? '`Connected`' : '`Unreachable`',
-          false,
         ),
         embedField(
           `${CUSTOM_EMOJIS.servers} Servers`,
           `\`${interaction.client.guilds.cache.size}\``,
-          false,
         ),
       );
 

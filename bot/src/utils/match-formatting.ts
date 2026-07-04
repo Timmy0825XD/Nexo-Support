@@ -1,4 +1,6 @@
 /** Escape characters that break Discord markdown emphasis/code spans. */
+import { CUSTOM_EMOJIS } from '../constants/emojis.js';
+
 export function escapeDiscordMarkdown(value: string): string {
   return value.replace(/([*_`~|>\\])/g, '\\$1');
 }
@@ -25,7 +27,7 @@ export function formatMatchupTitle(team1Name: string, team2Name: string): string
 
 /**
  * Standard score line: **TEAM** `3` - `2` **TEAM**
- * Optional winnerSide adds 🏆 before the winning team name.
+ * Optional winnerSide adds trophy before the winning team name.
  */
 export function formatInlineScoreLine(params: {
   team1Name: string;
@@ -36,11 +38,11 @@ export function formatInlineScoreLine(params: {
 }): string {
   const team1 =
     params.winnerSide === 1
-      ? `🏆 ${formatEmphasizedName(params.team1Name)}`
+      ? `${CUSTOM_EMOJIS.trophy} ${formatEmphasizedName(params.team1Name)}`
       : formatEmphasizedName(params.team1Name);
   const team2 =
     params.winnerSide === 2
-      ? `🏆 ${formatEmphasizedName(params.team2Name)}`
+      ? `${CUSTOM_EMOJIS.trophy} ${formatEmphasizedName(params.team2Name)}`
       : formatEmphasizedName(params.team2Name);
 
   return `${team1} ${formatScoreValue(params.score1)} - ${formatScoreValue(params.score2)} ${team2}`;

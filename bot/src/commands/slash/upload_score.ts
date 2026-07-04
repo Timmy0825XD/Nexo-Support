@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, ChannelType } from 'discord.js';
 import type { SlashCommand } from '../types.js';
+import { CUSTOM_EMOJIS } from '../../constants/emojis.js';
 import { PermissionError } from '../../guards/permissions.js';
 import { assertUploadScorePermission } from '../../guards/tournament-permissions.js';
 import { ChallongeError, getChallongeCredentials, reportMatchScore } from '../../services/challonge.js';
@@ -180,7 +181,7 @@ export const uploadScoreCommand: SlashCommand = {
             tournamentName: tournament.name,
             matchGroup: match.group,
             challongeMatchId: match.challonge_match_id,
-            archiveChannelLine: `📁 Ticket archivado en ${formatChannel(interaction.guild, tournament.transcript_channel_id)}.`,
+            archiveChannelLine: `${CUSTOM_EMOJIS.transcript} Ticket archivado en ${formatChannel(interaction.guild, tournament.transcript_channel_id)}.`,
           }),
         ],
       });

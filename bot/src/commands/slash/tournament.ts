@@ -7,6 +7,7 @@ import {
   SlashCommandSubcommandBuilder,
 } from 'discord.js';
 import type { SlashCommand } from '../types.js';
+import { CUSTOM_EMOJIS } from '../../constants/emojis.js';
 import { autocompleteTournaments } from '../../autocomplete/tournaments.js';
 import { ResourceValidationError } from '../../guards/discord-resources.js';
 import { validateTournamentResources } from '../../guards/tournament-resources.js';
@@ -506,7 +507,7 @@ export const tournamentCommand: SlashCommand = {
           embeds: [
             successEmbed(
               'Tournament Deleted',
-              `✅ Tournament **${deleted.name}** was removed from the bot.`,
+              `${CUSTOM_EMOJIS.done} Tournament **${deleted.name}** was removed from the bot.`,
             ),
           ],
         });

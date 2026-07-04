@@ -1,5 +1,6 @@
 import { AttachmentBuilder, SlashCommandBuilder } from 'discord.js';
 import type { SlashCommand } from '../types.js';
+import { CUSTOM_EMOJIS } from '../../constants/emojis.js';
 import { PermissionError, assertOrganiser } from '../../guards/permissions.js';
 import { getGuildConfig } from '../../services/guilds.js';
 import {
@@ -119,8 +120,8 @@ export const roleCommand: SlashCommand = {
         const result = await toggleUserRole(interaction.guild, member, targetMember, guildRole);
         const message =
           result.action === 'added'
-            ? `✅ Role ${formatRoleFromRole(guildRole)} has been added to ${formatMember(targetMember)}.`
-            : `✅ Role ${formatRoleFromRole(guildRole)} has been removed from ${formatMember(targetMember)}.`;
+            ? `${CUSTOM_EMOJIS.done} Role ${formatRoleFromRole(guildRole)} has been added to ${formatMember(targetMember)}.`
+            : `${CUSTOM_EMOJIS.done} Role ${formatRoleFromRole(guildRole)} has been removed from ${formatMember(targetMember)}.`;
 
         await interaction.editReply({ embeds: [successEmbed('Role Updated', message)] });
 
@@ -164,7 +165,7 @@ export const roleCommand: SlashCommand = {
             embeds: [
               successEmbed(
                 'Role Information',
-                `${baseDescription}\n\nMembers:\n${memberLines}\n\n📋 Role information displayed successfully.\n\n✅ Role information retrieved successfully.`,
+                `${baseDescription}\n\nMembers:\n${memberLines}\n\n${CUSTOM_EMOJIS.details} Role information displayed successfully.\n\n${CUSTOM_EMOJIS.done} Role information retrieved successfully.`,
               ).addFields(embedField('Role ID', guildRole.id, true)),
             ],
           });
@@ -186,7 +187,7 @@ export const roleCommand: SlashCommand = {
           embeds: [
             successEmbed(
               'Role Information',
-              `${baseDescription}\n\n📄 Member list is too large to display.\nPlease check the attached CSV file.\n\n✅ Role information retrieved successfully.\n📄 Member list exported as CSV.`,
+              `${baseDescription}\n\n${CUSTOM_EMOJIS.sheets} Member list is too large to display.\nPlease check the attached CSV file.\n\n${CUSTOM_EMOJIS.done} Role information retrieved successfully.\n${CUSTOM_EMOJIS.sheets} Member list exported as CSV.`,
             ).addFields(embedField('Role ID', guildRole.id, true)),
           ],
           files: [attachment],
@@ -209,7 +210,7 @@ export const roleCommand: SlashCommand = {
           embeds: [
             successEmbed(
               'Role Assignment Completed',
-              `✅ Role assignment completed.\n\nRole: ${formatRoleFromRole(guildRole)}\nAdded To: ${result.processed} members\nSkipped: ${result.skipped} members (already had role)`,
+              `${CUSTOM_EMOJIS.done} Role assignment completed.\n\nRole: ${formatRoleFromRole(guildRole)}\nAdded To: ${result.processed} members\nSkipped: ${result.skipped} members (already had role)`,
             ),
           ],
         });
@@ -243,7 +244,7 @@ export const roleCommand: SlashCommand = {
           embeds: [
             successEmbed(
               'Role Removal Completed',
-              `✅ Role removal completed.\n\nRole: ${formatRoleFromRole(guildRole)}\nRemoved From: ${result.processed} members\nSkipped: ${result.skipped} members (did not have role)`,
+              `${CUSTOM_EMOJIS.done} Role removal completed.\n\nRole: ${formatRoleFromRole(guildRole)}\nRemoved From: ${result.processed} members\nSkipped: ${result.skipped} members (did not have role)`,
             ),
           ],
         });
