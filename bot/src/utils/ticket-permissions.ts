@@ -156,3 +156,31 @@ export async function applyClosedTicketPermissions(params: {
   });
   await applyTicketPermissionOverwrites(params.channel, overwrites);
 }
+
+export function listTicketMemberOverwriteIds(channel: TextChannel): string[] {
+  return [...channel.permissionOverwrites.cache.values()]
+    .filter((overwrite) => overwrite.type === OverwriteType.Member)
+    .filter((overwrite) => (overwrite.allow.bitfield & TICKET_MEMBER_ALLOW) === TICKET_MEMBER_ALLOW)
+    .map((overwrite) => overwrite.id);
+}
+
+export function hasTicketMemberAccess(channel: TextChannel, userId: string): boolean {
+  const overwrite = channel.permissionOverwrites.cache.get(userId);
+  if (!overwrite || overwrite.type !== OverwriteType.Member) {
+    return false;
+  }
+  return (overwrite.allow.bitfield & TICKET_MEMBER_ALLOW) === TICKET_MEMBER_ALLOW;
+}
+
+export async function grantTicketMemberAccess(
+  channel: TextChannel,
+  userId: string,
+): Promise<void> {
+  await channel.permissionOverwrites.edit(userId, {
+    ViewChannel: true,
+    SendMessages: true,
+    ReadMessageHistory: true,
+    AttachFiles: true,
+    EmbedLinks: true,
+  });
+}

@@ -2,7 +2,7 @@ import { EmbedBuilder, type Guild, type TextChannel } from 'discord.js';
 import type { SheetParticipantLookup } from '../services/sheets.js';
 import type { MatchListRow } from '../types/match.js';
 import type { TournamentRow } from '../types/tournament.js';
-import { EMBED_COLORS } from '../constants/emojis.js';
+import { EMBED_COLORS, CUSTOM_EMOJIS } from '../constants/emojis.js';
 import { isGroupStageMatch } from './auto-room-stage.js';
 import { embedField } from './embeds.js';
 import { formatChannel, formatRole, formatUser } from './guild-display.js';
@@ -88,7 +88,7 @@ export async function sendMatchTicketWelcome(params: {
 
   const content = [
     `**Greetings, Captains.** Your ticket has been created.${captainMentions ? ` ${captainMentions}` : ''}`,
-    `> :alarm_clock: Please agree on a **date and time** for your Schedule, and remember to ping ${helperRole} once the schedule has been finalized.`,
+    `> ${CUSTOM_EMOJIS.schedule} Please agree on a **date and time** for your Schedule, and remember to ping ${helperRole} once the schedule has been finalized.`,
   ].join('\n');
 
   await params.channel.send({

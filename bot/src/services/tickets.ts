@@ -14,6 +14,9 @@ import { resolveScheduleMatchCaptains } from './schedule-results.js';
 import {
   applyClosedTicketPermissions,
   applyOpenTicketPermissions,
+  grantTicketMemberAccess,
+  hasTicketMemberAccess,
+  listTicketMemberOverwriteIds,
 } from '../utils/ticket-permissions.js';
 
 export interface MatchRoomRow {
@@ -233,6 +236,31 @@ export async function resolveOpenTicketMemberIds(params: {
   }
 
   return [...memberIds];
+}
+
+export async function addUserToOpenTicket(params: {
+  guild: Guild;
+  channel: TextChannel;
+  userId: string;
+}): Promise<void> {
+  if (hasTicketMemberAccess(params.channel, params.userId)) {
+    throw new TicketError('That user already has access to this ticket.');
+  }
+
+  const member = await params.guild.members.fetch(params.userId).catch(() => null);
+  if (!member) {
+    throw new TicketError('That user is not a member of this server.');
+  }
+
+  if (member.user.bot) {
+    throw new TicketError('Bots cannot be added to match tickets.');
+  }
+
+  await grantTicketMemberAccess(params.channel, params.userId);
+}
+
+export function collectPreservedTicketMemberIds(channel: TextChannel): string[] {
+  return listTicketMemberOverwriteIds(channel);
 }
 
 export async function closeTicketChannel(params: {

@@ -1,5 +1,9 @@
 import type { MatchListRow } from '../types/match.js';
 import { isGroupStageMatch } from './auto-room-stage.js';
+import {
+  getImportantMatchChannelPrefix,
+  resolveImportantMatchKind,
+} from './important-match.js';
 
 const MAX_CHANNEL_NAME_LENGTH = 100;
 
@@ -61,18 +65,27 @@ export function extractGroupSlug(group: string): string | null {
 
 /**
  * Ticket channel name pattern:
+ * - Important matches: `{semi|3rd|final}-{team1}-vs-{team2}`
  * - Group brackets: `{group}-r{round}-{team1}-vs-{team2}` → `a-r1-alpha-vs-beta`
  * - Single bracket: `r{round}-{team1}-vs-{team2}` → `r1-alpha-vs-beta`
  */
 export function buildTicketChannelName(match: MatchListRow): string {
-  const roundSegment = buildRoundSegment(match.round);
   const team1 = sanitizeChannelSegment(match.team1_name);
   const team2 = sanitizeChannelSegment(match.team2_name);
+  const vsSegment = `${team1}-vs-${team2}`;
+
+  const importantKind = resolveImportantMatchKind(match);
+  if (importantKind) {
+    const prefix = getImportantMatchChannelPrefix(importantKind);
+    return `${prefix}-${vsSegment}`.slice(0, MAX_CHANNEL_NAME_LENGTH);
+  }
+
+  const roundSegment = buildRoundSegment(match.round);
   const groupSlug = extractGroupSlug(match.group);
 
   const segments = groupSlug
-    ? [groupSlug, roundSegment, `${team1}-vs-${team2}`]
-    : [roundSegment, `${team1}-vs-${team2}`];
+    ? [groupSlug, roundSegment, vsSegment]
+    : [roundSegment, vsSegment];
 
   return segments.join('-').slice(0, MAX_CHANNEL_NAME_LENGTH);
 }
