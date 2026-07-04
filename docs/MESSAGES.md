@@ -13,6 +13,11 @@ Referencia de **todas las cadenas visibles al usuario** (respuestas de comandos,
 |---|---|
 | `{done}` | Prefijo animado de éxito (`successEmbed`) — ver [`EMOJIS.md`](./EMOJIS.md) |
 | `{error}` | Prefijo de error (`errorEmbed`) |
+| `{back}` / `{next}` | Emojis custom de navegación en botones de paginación (`pagination-buttons.ts`) |
+| `{settings}` `{alert}` `{role}` `{challonge}` `{transcript}` `{bot_icone}` `{thumbnail}` | Fields/títulos de `/settings show` |
+| `{warn_perm}` | Línea de permiso en entradas de `/bot help` |
+| `{skip}` `{warning}` `{stop}` | Room creation / auto-room status |
+| `{love}` `{servers}` `{team_member}` `{uptime}` `{memory}` `{platform}` `{node}` `{version}` | Fields de `/bot about` |
 | `{var}` | Placeholder dinámico |
 | 🕶️ | Respuesta ephemeral (solo quien ejecutó) |
 | 📢 | Mensaje en canal (no reply al comando) |
@@ -26,23 +31,25 @@ Referencia de **todas las cadenas visibles al usuario** (respuestas de comandos,
 | Comando | Archivo principal | Utilidades relacionadas |
 |---|---|---|
 | `/ping` | [`ping.ts`](../bot/src/commands/slash/ping.ts) | `embeds.ts` |
-| `/bot about\|help` | [`bot.ts`](../bot/src/commands/slash/bot.ts) | `bot-info.ts`, `help-pagination.ts` |
+| `/bot about\|help` | [`bot.ts`](../bot/src/commands/slash/bot.ts) | `bot-info.ts`, `help-pagination.ts`, `pagination-buttons.ts` |
 | `/server info\|banlist` | [`server.ts`](../bot/src/commands/slash/server.ts) | `embeds.ts` |
+| `/user ban\|unban` | [`user.ts`](../bot/src/commands/slash/user.ts) | `user-moderation-display.ts`, `user-moderation.ts` |
+| `/utility *` | [`utility.ts`](../bot/src/commands/slash/utility.ts) | `utility-display.ts`, `utility-helpers.ts`, `utility-embed.ts`, `interactions/utility-embed-builder.ts` |
 | `/settings *` | [`settings.ts`](../bot/src/commands/slash/settings.ts) | `guild-display.ts` |
 | `/staff *` | [`staff.ts`](../bot/src/commands/slash/staff.ts) | `guild-display.ts` |
 | `/role *` | [`role.ts`](../bot/src/commands/slash/role.ts) | `role-hierarchy.ts` |
 | `/ticket *` | [`ticket.ts`](../bot/src/commands/slash/ticket.ts) | — |
 | `/tournament *` | [`tournament.ts`](../bot/src/commands/slash/tournament.ts) | `tournament-display.ts` |
 | `/team info\|list` | [`team.ts`](../bot/src/commands/slash/team.ts) | `team-display.ts` |
-| `/sheet *` | [`sheet.ts`](../bot/src/commands/slash/sheet.ts) | `sheet-headers-display.ts`, `sheet-validation-display.ts`, `sheet-validation-pagination.ts`, `sheet-validation.ts` |
+| `/sheet *` | [`sheet.ts`](../bot/src/commands/slash/sheet.ts) | `sheet-headers-display.ts`, `sheet-validation-display.ts`, `sheet-validation-pagination.ts`, `pagination-buttons.ts` |
 | `/schedule *` | [`schedule.ts`](../bot/src/commands/slash/schedule.ts) | `schedule-display.ts`, `schedule-result-display.ts`, `schedules.ts`, `schedule-results.ts` |
 | `/attendance *` | [`attendance.ts`](../bot/src/commands/slash/attendance.ts) | `attendance-display.ts`, `attendance.ts` (service) |
-| `/link *` | [`link.ts`](../bot/src/commands/slash/link.ts) | `attendance-display.ts`, `attendance.ts` |
-| `/get attendance\|sheet` | [`get.ts`](../bot/src/commands/slash/get.ts) | `attendance-display.ts`, `attendance-export.ts` |
+| `/link *` | [`link.ts`](../bot/src/commands/slash/link.ts) | `attendance-display.ts`, `attendance.ts`, `pagination-buttons.ts` |
+| `/get attendance\|sheet` | [`get.ts`](../bot/src/commands/slash/get.ts) | `attendance-display.ts`, `attendance-export.ts`, `pagination-buttons.ts` |
 | `/work_done` | [`work_done.ts`](../bot/src/commands/slash/work_done.ts) | `attendance-display.ts`, `staff-work-pay.ts` |
 | `/staff work` | [`staff.ts`](../bot/src/commands/slash/staff.ts) | `attendance-display.ts`, `staff-work-pay.ts` |
 | Botones schedule | [`schedule-buttons.ts`](../bot/src/interactions/schedule-buttons.ts) | `schedule-display.ts` |
-| `/room *` | [`room.ts`](../bot/src/commands/slash/room.ts) | `match-display.ts`, `room-available-pagination.ts` |
+| `/room *` | [`room.ts`](../bot/src/commands/slash/room.ts) | `match-display.ts`, `room-available-pagination.ts`, `pagination-buttons.ts` |
 | `/auto_room *` | [`auto_room.ts`](../bot/src/commands/slash/auto_room.ts) | `match-display.ts` |
 | `/upload_score` | [`upload_score.ts`](../bot/src/commands/slash/upload_score.ts) | `match-display.ts` |
 | `/correct_bracket` | [`correct_bracket.ts`](../bot/src/commands/slash/correct_bracket.ts) | `match-display.ts` |
@@ -97,11 +104,51 @@ Aparecen en varios comandos. Editar en el guard indicado.
 | `guard.link_add` | `Only the recorder assigned to this attendance can add recording links.` |
 | `guard.link_delete` | `Only the recorder assigned to this attendance can delete recording links.` |
 
+
+## `/attendance mark` (`attendance-display.ts` · `attendance.ts`)
+
+**Ruta:** `bot/src/commands/slash/attendance.ts`
+
+| ID | Sub | Tipo | Título | Descripción |
+|---|---|---|---|---|
+| `attendance.mark.ok` | mark | *(no reply — deleted)* | — | Solo se publica el embed detallado en ticket + attendance channel; audit log `Attendance Marked` |
+| `attendance.mark.embed.title` | 📢 ticket + attendance | success embed | `{done} Attendance Marked Successfully` | — |
+| `attendance.mark.embed.score` | descripción | — | `{inline score line with winner}` |
+| `attendance.mark.embed.tournament` | field | `Tournament` | `{name}` |
+| `attendance.mark.embed.judge` | field | `Judge` | `{@user}` |
+| `attendance.mark.embed.recorder` | field | `Recorder` | `{@user}` |
+| `attendance.mark.embed.channel` | field | `Channel` | `{#ticket}` |
+| `attendance.mark.embed.links` | field | `Recording Link` | lista `- [Link](url)` o `*No links submitted*` |
+| `attendance.mark.embed.remark` | field | `Remark` | `DW` (solo default win) |
+| `attendance.mark.embed.footer` | footer | — | `{guild name}` + timestamp |
+
+---
+
+
+### `/link add` (`link.ts`)
+
+| ID | Tipo | Título | Descripción |
+|---|---|---|---|
+| `link.add.success` | embed | `{done} Recording Links Added` | `{n} link(s) were added and attendance embeds were updated.` |
+
+### 📢 Events links channel (`attendance-display.ts`)
+
+Publicado en `tournaments.events_links_channel_id` cuando está configurado (mark con link inicial o `/link add`).
+
+| ID | Ubicación | Texto |
+|---|---|---|
+| `events.links.tournament` | cuerpo | `**Tournament:** {name}` |
+| `events.links.match` | cuerpo | `**Match:** **{team1}** __vs__ **{team2}**` |
+| `events.links.score` | cuerpo | `**Score:** {inline score line}` |
+| `events.links.header` | cuerpo | `**Links:**` |
+| `events.links.entry` | cuerpo | `- [Link]({youtubeUrl})` |
+
+---
 ### `/link delete` (`link.ts`)
 
 | ID | Tipo | Título | Descripción / cuerpo |
 |---|---|---|---|
-| `link.delete.success` | embed | `{done} Recording Links Deleted` | `All {n} recording link(s) were removed and attendance embeds were updated.` |
+| `link.delete.success` | embed | `{done} Recording Links Deleted` | `All {n} recording link(s) were removed and attendance embeds were updated.` — also removes matching posts from `events_links` when configured |
 
 ### `/link missing` (`attendance-display.ts`)
 
@@ -114,9 +161,9 @@ Aparecen en varios comandos. Editar en el guard indicado.
 | `link.missing.header_count` | embed desc | — | `🔗 **Missing Links:** {n} match(es) need attention` |
 | `link.missing.entry` | embed desc | — | `{n}. **{team1}** __VS__ **{team2}**` + blockquote `Recorder`, `Date` (`<t:R>`), `Status: Awaiting Link` |
 | `link.missing.footer` | footer | — | `Page {page}/{total} • {n} total missing` (+ `Session expired` when timed out) |
-| `link.missing.btn_prev` | botón | `«` | — |
+| `link.missing.btn_prev` | botón | `{back}` | emoji-only nav |
 | `link.missing.btn_page` | botón | `{page}/{total}` | disabled |
-| `link.missing.btn_next` | botón | `»` | — |
+| `link.missing.btn_next` | botón | `{next}` | emoji-only nav |
 | `link.missing.wrong_user` | plain 🕶️ | — | `Only the person who ran /link missing can browse these pages.` |
 
 ### `guards/ticket-channel.ts`
@@ -153,6 +200,8 @@ Aparecen en varios comandos. Editar en el guard indicado.
 | `ping.field.db_latency` | field | `{latency} Database Latency` | `{n}ms` |
 | `ping.field.db_status` | field | `{database} Database` | `` `Connected` `` / `` `Unreachable` `` |
 | `ping.field.servers` | field | `{servers} Servers` | `{n}` |
+| `ping.thumbnail` | embed | — | Avatar del bot (`displayAvatarURL`) |
+| `ping.fields_inline` | layout | — | Todos los fields con `inline: true` |
 
 ---
 
@@ -163,12 +212,21 @@ Aparecen en varios comandos. Editar en el guard indicado.
 | ID | Sub | Tipo | Título | Descripción |
 |---|---|---|---|---|
 | `bot.no_guild` | * | error embed | `Server Only` | `This command can only be used inside a server.` |
-| `bot.about.title` | about | info embed | `Created with ❤️ for - {guildName} -` | `✅ Bot information retrieved successfully.` |
+| `bot.about.title` | about | info embed | `Created with {love} for - {guildName} -` | — |
+| `bot.about.thumbnail` | about | embed | — | Avatar del bot |
+| `bot.about.field.servers` | about | field | `{servers} Servers` | `{n}` |
+| `bot.about.field.members` | about | field | `{team_member} Members` | `{n}` |
+| `bot.about.field.uptime` | about | field | `{uptime} Uptime` | formatted uptime |
+| `bot.about.field.memory` | about | field | `{memory} Memory Usage` | RSS heap |
+| `bot.about.field.platform` | about | field | `{platform} Platform` | `process.platform` |
+| `bot.about.field.node` | about | field | `{node} Node` | `process.version` |
+| `bot.about.field.version` | about | field | `{version} Bot Version` | package version |
 | `bot.help.empty` | help | info embed | `Command List` | `No commands are currently registered.` |
-| `bot.help.page` | help | info embed paginado | Categoría (desde `buildHelpCategories`) | Entradas por categoría |
-| `bot.help.footer` | help | footer | — | `🛡️ Category {n} of {total} • {botName} Help System` |
-| `bot.help.btn_prev` | help | botón | `◀` | — |
-| `bot.help.btn_next` | help | botón | `▶▶` | — |
+| `bot.help.page` | help | info embed paginado | Categoría (desde `buildHelpCategories`) | Room incluye `/room` + `/auto_room`; Schedule incluye `/schedule` + scores. Permiso opcional: `{warn_perm} {permission}` |
+| `bot.help.footer` | help | footer | — | `📚 Category {n} of {total} • {botName} Help System` |
+| `bot.help.btn_prev` | help | botón | `{back} Back` | — |
+| `bot.help.btn_next` | help | botón | `{next} Next` | — |
+| `bot.help.btn_category` | help | botón | label de categoría | emoji custom vía `setButtonLabelWithEmoji` |
 | `bot.help.wrong_user` | help | plain 🕶️ | — | `Only the person who ran /bot help can browse these pages.` |
 
 ---
@@ -190,6 +248,54 @@ Aparecen en varios comandos. Editar en el guard indicado.
 
 ---
 
+## `/user`
+
+**Ruta:** `bot/src/commands/slash/user.ts` · subcomandos: `ban`, `unban`  
+**Embeds:** `bot/src/utils/user-moderation-display.ts` · servicio: `user-moderation.ts`
+
+| ID | Sub | Tipo | Título | Descripción |
+|---|---|---|---|---|
+| `user.no_guild` | * | error embed | `Server Only` | `This command can only be used inside a server.` |
+| `user.denied` | * | error embed | `Permission Denied` | organiser guard |
+| `user.ban.ok` | ban | success embed | `User Banned` | `✅ {@user} has been banned successfully.` + fields Player, User ID, Account Created, Duration, Reason |
+| `user.ban.thumbnail` | ban | embed | — | Avatar del usuario baneado (si resuelve) |
+| `user.unban.ok` | unban | success embed | `User Unbanned` | `✅ {@user} has been unbanned successfully.` |
+| `user.invalid` | * | error embed | `Invalid Input` | Zod validation message |
+| `user.error` | * | error embed | `Ban Error` | `UserModerationError` / `Something went wrong while processing the request.` |
+
+---
+
+## `/utility`
+
+**Ruta:** `bot/src/commands/slash/utility.ts`  
+**Subcomandos:** `clear_category`, `clear`, `emoji_steal`, `random`, `utc`, `avatar`, `toss`, `enlarge`, `embed`, `edit_embed`  
+**Utilidades:** `utility-display.ts`, `utility-helpers.ts`, `utility-embed.ts`, `interactions/utility-embed-builder.ts`
+
+| ID | Sub | Tipo | Título | Descripción |
+|---|---|---|---|---|
+| `utility.denied` | * | error embed | `Permission Denied` | Admin / Manage Messages / Manage Emojis según subcomando |
+| `utility.clear_category.confirm` | clear_category | info embed | `Clear Category — Confirmation Required` | `⚠️ **This action cannot be undone.**` + lista de canales |
+| `utility.clear_category.cancel` | clear_category | error embed | `Clear Category Cancelled` | `No channels were deleted in **{category}**.` |
+| `utility.clear_category.progress` | clear_category | info embed | `Clearing Category…` | deleting channels |
+| `utility.clear_category.ok` | clear_category | success embed | `Category Cleared` | `✅ **{category}** is now empty. **{n}** channel(s) deleted.` |
+| `utility.clear.ok` | clear | success embed | `Channel Cleared` | `buildClearResultDescription` |
+| `utility.clear.fail` | clear | error embed | `Clear Failed` | — |
+| `utility.emoji_steal.ok` | emoji_steal | info embed | `Emoji Removed` | fields Name, ID, Animated + imagen |
+| `utility.random.ok` | random | success embed | `Random Pick` / `Random Picks` | lista numerada |
+| `utility.utc.ok` | utc | info embed | `UTC Time` | timestamps Discord |
+| `utility.avatar.ok` | avatar | info embed | `{tag}'s Avatar` | download link |
+| `utility.toss.ok` | toss | success embed | `Coin Toss` | `The coin landed on **{Heads\|Tails}**!` |
+| `utility.enlarge.ok` | enlarge | info embed | `Enlarged Emoji` | imagen + Animated Yes/No |
+| `utility.embed.start` | embed | info embed | — | `Open the interactive embed builder (ephemeral preview)` |
+| `utility.embed.error` | embed/edit_embed | error embed | `Embed Error` | builder validation |
+| `utility.invalid_channel` | * | error embed | `Invalid Channel` | — |
+| `utility.invalid_number` | random | error embed | `Invalid Number` | `Number must be at least 1.` |
+| `utility.invalid_date` | utc | error embed | `Invalid Date` | — |
+
+**Botones clear_category:** `Confirm Delete` (Danger) · `Cancel` (Secondary)
+
+---
+
 ## `/settings`
 
 **Ruta:** `bot/src/commands/slash/settings.ts` · subcomandos: `setup`, `edit`, `show`  
@@ -199,12 +305,23 @@ Aparecen en varios comandos. Editar en el guard indicado.
 |---|---|---|---|---|
 | `settings.no_guild` | * | error embed | `Server Only` | (guard) |
 | `settings.denied` | * | error embed | `Permission Denied` | (guard admin) |
-| `settings.show` | show | info embed | `⚙️ Current Bot Settings` | Sin config: `⚠️ No configuration found.\n\nUse /settings setup to configure the bot before using tournament commands.` |
+| `settings.show` | show | info embed | `{settings} Current Bot Settings` | Sin config: `{alert} No configuration found.\n\nUse /settings setup to configure the bot before using tournament commands.` |
 | `settings.setup` | setup | success embed | `Bot settings updated successfully.` | fields de roles/canales |
 | `settings.edit.no_setup` | edit | error embed | `Setup Required` | `No complete configuration found. Run /settings setup before editing settings.` |
 | `settings.edit` | edit | success embed | `Settings Updated Successfully` | `Modified Settings:` + fields + `🕒 Updated At` |
 | `settings.validation` | * | error embed | `Validation Failed` | `{error.message}` |
 | `settings.no_fields` | * | error embed | `Invalid Input` | `At least one setting must be provided.` |
+
+**Fields (`SETTINGS_FIELD_LABELS` en `guild-display.ts`):**
+
+| ID | Field name |
+|---|---|
+| `settings.field.admin_role` | `{role} Admin Role` |
+| `settings.field.challonge_logs` | `{challonge} Challonge Logs` |
+| `settings.field.transcript_logs` | `{transcript} Transcript Logs` |
+| `settings.field.bot_logs` | `{bot_icone} Bot Logs` (setup/edit) |
+| `settings.field.bot_logs_channel` | `{bot_icone} Bot Logs Channel` (show) |
+| `settings.field.thumbnail_channel` | `{thumbnail} Thumbnail Channel` |
 
 **Fallbacks en guild-display:** `Not configured` · `❌ Deleted Role` · `❌ Deleted Channel` · `❌ Deleted Category` · `❌ Unknown Member`
 
@@ -373,17 +490,37 @@ You've been assigned as: **{position}**
 | `sheet.headers.all` | info embed + followUp | Un embed por formato (1vs1–5vs5) | — |
 | `sheet.validate.denied` | validate | error embed 🕶️ | `Permission Denied` | `assertAdmin` message |
 | `sheet.validate.guild` | validate | error embed 🕶️ | `Guild Only` | `This command can only be used inside a server.` |
-| `sheet.validate.pass` | validate | success embed 📢 | `Sheet Validation Passed` | All players/teams passed |
-| `sheet.validate.fail` | validate | paginated embeds 📢 + `.txt` | Summary + sections | `◀` / section label / `▶` buttons (2 min), full report in attachment |
+| `sheet.validate.pass` | validate | success embed 📢 | `{done} Sheet Validation Passed` | All players/teams passed |
+| `sheet.validate.fail` | validate | paginated embeds 📢 + `.txt` | Summary + sections | `{back}` / section label / `{next}` buttons (2 min), full report in attachment |
 | `sheet.validate.pagination.denied` | validate | plain 🕶️ | — | `Only the person who ran /sheet validate can browse these pages.` |
 | `sheet.validate.error` | validate | error embed 🕶️ | `Sheet Validation Error` | Sheets / banned list / network errors |
+
+**Summary fallido (`sheet-validation-display.ts`):** `{error} Found **{n}** issue(s)…` · navegación: `Use {back} {next} to browse each section.`
+
+---
+
+## `/get`
+
+**Ruta:** `bot/src/commands/slash/get.ts` · subcomandos: `attendance`, `sheet`  
+**Embeds:** `attendance-display.ts`, `attendance-export.ts`
+
+| ID | Sub | Tipo | Título | Descripción |
+|---|---|---|---|---|
+| `get.no_guild` | * | error embed | `Server Only` | — |
+| `get.denied` | attendance | error embed | `Permission Denied` | attendance staff guard |
+| `get.attendance.not_found` | attendance | error embed | `Tournament Not Found` | — |
+| `get.attendance.embed` | attendance | info embed | `buildGetAttendanceEmbed` | registros paginados por usuario |
+| `get.attendance.btn_prev` | attendance | botón | `{back} Previous` | — |
+| `get.attendance.btn_next` | attendance | botón | `{next} Next` | — |
+| `get.sheet.not_found` | sheet | error embed | `Tournament Not Found` | — |
+| `get.sheet.ok` | sheet | success embed | `Attendance Sheet Generated` | `The Excel report for **{tournament}** is attached.` |
 
 ---
 
 ## `/schedule`
 
 **Ruta:** `bot/src/commands/slash/schedule.ts`  
-**Subcomandos:** `create`, `delete`, `unassigned`, `refresh`, `resign`  
+**Subcomandos:** `create`, `update`, `delete`, `unassigned`, `refresh`, `resign`, `results`, `results_delete`, `show`  
 **Servicio:** `bot/src/services/schedules.ts` · **Embeds canal:** `bot/src/utils/schedule-display.ts`
 
 ### Respuestas al comando
@@ -401,9 +538,9 @@ You've been assigned as: **{position}**
 | `schedule.show.ok` | show | info embed | Schedule channel embed preview |
 | `schedule.delete.ok` | delete | ephemeral plain text | — | `The Schedule **{team1} vs {team2}** has been deleted successfully. Reason: {reason\|Not provided}` |
 | `schedule.unassigned.pending` | unassigned | info embed | `⚠️ Unassigned Matches Found` | `Filter: **{filter}**` + bloques |
-| `schedule.unassigned.empty` | unassigned | info embed | `All Matches Staffed` | `No pending matches are missing staff.` |
-| `schedule.unassigned.btn_prev` | unassigned | botón | `Previous` | — |
-| `schedule.unassigned.btn_next` | unassigned | botón | `Next` | — |
+| `schedule.unassigned.empty` | unassigned | info embed | `{done} All Matches Staffed` | `No pending matches are missing staff.` |
+| `schedule.unassigned.btn_prev` | unassigned | botón | `{back} Previous` | — |
+| `schedule.unassigned.btn_next` | unassigned | botón | `{next} Next` | — |
 | `schedule.unassigned.wrong_user` | unassigned | plain 🕶️ | — | `Only the person who ran /schedule unassigned can browse these pages.` |
 | `schedule.refresh.ok` | refresh | success embed | `♻️ Schedule Buttons Refreshed` | `Assignment buttons on the schedule channel post were refreshed for **10 minutes**. Filled roles stay disabled.` |
 | `schedule.resign.ok` | resign | *(no reply — deleted)* | — | Success is logged via `logScheduleResign`; ticket gets `schedule.notify.resigned` |
@@ -430,6 +567,7 @@ You've been assigned as: **{position}**
 | `schedule.svc.tournament_gone` | `Tournament for this schedule was not found.` |
 | `schedule.svc.match_gone` | `Match for this schedule was not found.` |
 | `schedule.svc.invalid_datetime` | `The provided date and time is not a valid UTC datetime.` |
+| `schedule.svc.too_soon` | `The schedule time must be at least 10 minutes from now.` — create y update (cuando cambia la fecha/hora) |
 
 ### Errores de resultados (`schedule-results.ts`)
 
@@ -450,10 +588,10 @@ Publicado en el canal de resultados del torneo con capturas adjuntas.
 
 | ID | Ubicación | Texto |
 |---|---|---|
-| `schedule.result.embed.title` | título | `[🏆 {TEAM1} 🆚 {TEAM2}]({transcriptMessageUrl})` — en canal de resultados; en ticket, enlace al mismo mensaje del ticket |
+| `schedule.result.embed.title` | título | `🏆 {TEAM1} 🆚 {TEAM2}` — clickable via embed `url` pointing to the ticket transcript message |
 | `schedule.result.embed.utc` | descripción | `**Result UTC Time:** {YYYY-MM-DD HH:mm}` — usa `schedules.scheduled_at` |
 | `schedule.result.embed.local` | descripción | `**Result Local Time:** <t:{unix}:f> (<t:{unix}:R>)` — usa `schedules.scheduled_at` |
-| `schedule.result.embed.tournament` | descripción | `**__Tournament:__** {name}` |
+| `schedule.result.embed.tournament` | descripción | `**Tournament:** {name}` |
 | `schedule.result.embed.channel` | descripción | `**Channel:** {#ticket}` |
 | `schedule.result.embed.captain1` | descripción | `**Team 1 Captain:**` — 1vs1: `@username` · 2vs2+: `{@user} ({team name})` |
 | `schedule.result.embed.captain2` | descripción | `**Team 2 Captain:**` — 1vs1: `@username` · 2vs2+: `{@user} ({team name})` |
@@ -472,7 +610,7 @@ Descripción en markdown (sin fields). Mismo layout en ticket y schedule channel
 | `schedule.embed.title` | título | `{TEAM1} VS {TEAM2}` |
 | `schedule.embed.utc` | descripción | `**UTC Time:** {YYYY-MM-DD HH:mm}` |
 | `schedule.embed.local` | descripción | `**Local Time:** <t:{unix}:f> (<t:{unix}:R>)` |
-| `schedule.embed.tournament` | descripción | `**__Tournament:__** {name}` |
+| `schedule.embed.tournament` | descripción | `**Tournament:** {name}` |
 | `schedule.embed.round` | descripción | `**__Round:__** {round\|TBD}` |
 | `schedule.embed.channel` | descripción (solo schedule channel) | `**Channel:** {#ticket}` |
 | `schedule.embed.captain1` | descripción | `**Team 1 Captain:**` — 1vs1: `@username` · 2vs2+: `{@user} ({team name})` |
@@ -533,9 +671,11 @@ Descripción en markdown (sin fields). Mismo layout en ticket y schedule channel
 |---|---|---|---|---|
 | `room.denied` | * | error embed | `Permission Denied` / `Tournament Not Found` | — |
 | `room.create.ok` | create | success embed | `Rooms Created` | `buildRoomsCreatedEmbed` (ver abajo) |
-| `room.available.ok` | available | success embed | `Available Rooms for {tournament}` | paginado |
-| `room.available.empty` | available | warning embed | `No Available Matches` | detalles existing / TBD / Challonge |
+| `room.available.ok` | available | success embed | `{done} Available Rooms for {tournament}` | paginado |
+| `room.available.empty` | available | warning embed | `{error} No Available Matches` | detalles existing / TBD / Challonge |
 | `room.available.wrong_user` | available | plain 🕶️ | — | `Only the person who ran /room available can browse these pages.` |
+| `room.available.btn_prev` | available | botón | `{back} Previous` | — |
+| `room.available.btn_next` | available | botón | `{next} Next` | — |
 | `room.error` | * | error embed | `Room Error` | `MatchRoomError` messages |
 
 **`buildRoomsCreatedEmbed`** (`match-display.ts`):
@@ -543,9 +683,9 @@ Descripción en markdown (sin fields). Mismo layout en ticket y schedule channel
 | ID | Texto |
 |---|---|
 | `room.created.summary` | `These **tickets have been Successfully Created**` + lista `- {channel} — \`{name}\`` / `*No new tickets were created.*` |
-| `room.created.skipped` | `⏭️ Skipped **{n}** match(es) that already had a room.` |
-| `room.created.warnings` | `⚠️ *Warnings:*` |
-| `room.created.errors` | `❌ *Errors:*` |
+| `room.created.skipped` | `{skip} Skipped **{n}** match(es) that already had a room.` |
+| `room.created.warnings` | `{warning} *Warnings:*` |
+| `room.created.errors` | `{error} *Errors:*` |
 
 **`/room available` paginado** (`room-available-pagination.ts`):
 
@@ -587,9 +727,9 @@ Descripción en markdown (sin fields). Mismo layout en ticket y schedule channel
 | ID | Sub | Tipo | Título | Descripción |
 |---|---|---|---|---|
 | `auto_room.denied` | * | error embed | `Permission Denied` / `Tournament Not Found` | — |
-| `auto_room.stop` | stop | success embed | `Auto Room Disabled` | `⏹️ *Creación automática desactivada* para **{name}**.` |
-| `auto_room.toggle.on` | toggle | success embed | `Auto Room Enabled` | `✅ *Creación automática activada*…` |
-| `auto_room.toggle.off` | toggle | success embed | `Auto Room Disabled` | (mismo título que stop) |
+| `auto_room.stop` | stop | success embed | `Auto Room Disabled` | `{stop} *Creación automática desactivada* para **{name}**.` |
+| `auto_room.toggle.on` | toggle | success embed | `Auto Room Enabled` | `{done} *Creación automática activada* para **{name}**.` |
+| `auto_room.toggle.off` | toggle | success embed | `Auto Room Disabled` | `{stop} *Creación automática desactivada* para **{name}**.` |
 | `auto_room.run.created` | run | success embed | `Rooms Created` | `buildRoomsCreatedEmbed` |
 | `auto_room.run.idle` | run | success/info embed | `Auto Room Enabled` | `{tournament}\n\nAutomatic room creation is **enabled**.` + group stage note + `No new ready matches needed rooms right now.` |
 | `auto_room.run.partial` | run | success/info embed | `Auto Room Enabled` | `*Some matches could not be processed this run.*` |
@@ -618,9 +758,10 @@ Descripción en markdown (sin fields). Mismo layout en ticket y schedule channel
 
 | ID | Texto |
 |---|---|
-| `upload.embed.desc` | `✅ *Resultado subido correctamente a Challonge.*` |
+| `upload.embed.desc` | `{done} *Resultado subido correctamente a Challonge.*` |
 | `upload.embed.archived` | `📁 Ticket archivado en {channel}.` (**español**) |
-| Fields | Partido, Marcador final, Ganador, Llave, Torneo, Match ID, Nota |
+| `upload.embed.winner` | field Ganador | `{trophy} **{winner}**` |
+| `upload.embed.fields` | fields | — | Partido, Marcador final, Ganador, Llave, Torneo, Match ID, Nota |
 
 ---
 
@@ -633,14 +774,29 @@ Descripción en markdown (sin fields). Mismo layout en ticket y schedule channel
 | `correct.denied` | error embed | `Permission Denied` | correct_bracket guard |
 | `correct.not_found` | error embed | `Tournament Not Found` / `Match Not Found` | — |
 | `correct.tie` | error embed | `Invalid Scores` | (empate) |
-| `correct.ok` | success embed | `Bracket Corrected` | `✅ *Marcador actualizado en Challonge.*` + Marcador anterior/nuevo |
+| `correct.ok` | success embed | `Bracket Corrected` | `{done} *Marcador actualizado en Challonge.*` + Marcador anterior/nuevo + optional field `Salas reparadas` |
 | `correct.error` | error embed | `Correction Failed` | `{message}` |
 
 ---
 
+
+## Bot audit logs (`guild-logs.ts` · `log-embeds.ts`)
+
+Canal: `bot_logs` (configurado en `/settings setup`). Todos los embeds incluyen **thumbnail** = avatar del usuario en `Triggered By`.
+
+Eventos relevantes recientes:
+
+| ID | Título | Notas |
+|---|---|---|
+| `bot.log.recording_links_deleted` | `Recording Links Deleted` | Fields: Tournament, Match, Links Removed, Triggered By |
+| `bot.log.attendance_marked` | `Attendance Marked` | — |
+| `bot.log.schedule_created` | `Schedule Created` | — |
+| `bot.log.schedule_updated` | `Schedule Updated` | — |
+
+---
 ## Challonge audit logs (`guild-logs.ts` · `log-embeds.ts`)
 
-Canal: `challonge_logs` (configurado en `/settings setup`).
+Canal: `challonge_logs` (configurado en `/settings setup`). Todos los embeds usan **thumbnail** = avatar de quien ejecutó la acción.
 
 **Match updated** (`buildChallongeMatchUpdatedLogEmbed`) — `/upload_score`, `/correct_bracket`:
 
@@ -648,13 +804,13 @@ Canal: `challonge_logs` (configurado en `/settings setup`).
 |---|---|---|
 | `challonge.log.match.title` | embed | `:white_check_mark: Match Updated Successfully` |
 | `challonge.log.match.intro` | embed | `The match has been updated with the following details:` |
-| `challonge.log.match.tournament` | embed | `**__Tournament:__** [{name}](https://challonge.com/{slug})` |
-| `challonge.log.match.match` | embed | `**__Match:__** {team1} __vs__ {team2}` |
-| `challonge.log.match.channel` | embed | `**__Channel:__** {ticket channel}` |
-| `challonge.log.match.score` | embed | `**__Score:__** {score}` — corrección: `{old} / {new}` |
-| `challonge.log.match.winner` | embed | `**__Winner:__** **{team}**` |
-| `challonge.log.match.datetime` | embed | `**__Date & Time:__** {dd/mm/yyyy hh:mm}` |
-| `challonge.log.match.triggered` | embed | `**__Triggered By:__** {user mention}` |
+| `challonge.log.match.tournament` | embed | `**Tournament:** [{name}](https://challonge.com/{slug})` |
+| `challonge.log.match.match` | embed | `**Match:** {team1} __vs__ {team2}` |
+| `challonge.log.match.channel` | embed | `**Channel:** {ticket channel}` |
+| `challonge.log.match.score` | embed | `**Score:** {score}` — corrección: `{old} / {new}` |
+| `challonge.log.match.winner` | embed | `**Winner:** **{team}**` |
+| `challonge.log.match.datetime` | embed | `**Date & Time:** {dd/mm/yyyy hh:mm}` |
+| `challonge.log.match.triggered` | embed | `**Triggered By:** {user mention}` |
 
 **Tournament linked** (`buildChallongeTournamentLinkedLogEmbed`):
 
