@@ -6,3 +6,4 @@ package-lock.json
 *.log
 .DS_Store
 bot/data/schedule-thumbnail-state.json
+bot/.dev-bot.lock

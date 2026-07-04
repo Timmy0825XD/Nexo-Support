@@ -17,6 +17,8 @@ import { teamCommand } from './slash/team.js';
 import { ticketCommand } from './slash/ticket.js';
 import { tournamentCommand } from './slash/tournament.js';
 import { uploadScoreCommand } from './slash/upload_score.js';
+import { userCommand } from './slash/user.js';
+import { utilityCommand } from './slash/utility.js';
 import type { PrefixCommand, SlashCommand } from './types.js';
 
 export function loadSlashCommands(): SlashCommand[] {
@@ -40,6 +42,8 @@ export function loadSlashCommands(): SlashCommand[] {
     getCommand,
     linkCommand,
     workDoneCommand,
+    userCommand,
+    utilityCommand,
   ];
 }
 
