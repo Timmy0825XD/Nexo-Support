@@ -7,6 +7,7 @@ import {
   SlashCommandSubcommandBuilder,
 } from 'discord.js';
 import type { SlashCommand } from '../types.js';
+import { CUSTOM_EMOJIS } from '../../constants/emojis.js';
 import { autocompleteTournaments } from '../../autocomplete/tournaments.js';
 import { ResourceValidationError, validateStaffResources } from '../../guards/discord-resources.js';
 import {
@@ -42,6 +43,7 @@ import {
 } from '../../services/guilds.js';
 import {
   applyStaffRoles,
+  assertStaffPositionConfigured,
   buildStaffFireEmbed,
   buildStaffRecruitEmbed,
   resolveRolesForFire,
@@ -79,18 +81,6 @@ function staffConfigOptions(
       option
         .setName('recorder_role')
         .setDescription('Recorder role used for match recordings')
-        .setRequired(required),
-    )
-    .addRoleOption((option) =>
-      option
-        .setName('t1_admin_role')
-        .setDescription('Tier 1 tournament administrator role')
-        .setRequired(required),
-    )
-    .addRoleOption((option) =>
-      option
-        .setName('t2_admin_role')
-        .setDescription('Tier 2 tournament administrator role')
         .setRequired(required),
     )
     .addRoleOption((option) =>
@@ -149,12 +139,17 @@ function staffConfigOptions(
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(required),
     )
-    .addChannelOption((option) =>
+    .addRoleOption((option) =>
       option
-        .setName('event_rules_channel')
-        .setDescription('Event rules and procedures channel')
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        .setRequired(required),
+        .setName('t1_admin_role')
+        .setDescription('Tier 1 tournament administrator role (optional)')
+        .setRequired(false),
+    )
+    .addRoleOption((option) =>
+      option
+        .setName('t2_admin_role')
+        .setDescription('Tier 2 tournament administrator role (optional)')
+        .setRequired(false),
     );
 }
 
@@ -171,7 +166,7 @@ export const staffCommand: SlashCommand = {
           staffConfigOptions(
             subcommand
               .setName('set')
-              .setDescription('Initial complete staff configuration (all fields required)'),
+              .setDescription('Initial staff configuration (T1/T2 admin roles optional)'),
             true,
           ),
         )
@@ -383,6 +378,7 @@ export const staffCommand: SlashCommand = {
       try {
         if (subcommand === 'fire') {
           const position = staffFirePositionSchema.parse(interaction.options.getString('role', true));
+          assertStaffPositionConfigured(position, guildConfig!);
           const roleIds = resolveRolesForFire(position, guildConfig!);
           const result = await applyStaffRoles(
             interaction.guild,
@@ -396,7 +392,7 @@ export const staffCommand: SlashCommand = {
             embeds: [
               successEmbed(
                 'Staff Removal Updated',
-                `✅ Staff role removal processed successfully.\n\n${buildStaffFireEmbed(interaction.guild, targetMember, position, result)}`,
+                `${CUSTOM_EMOJIS.done} Staff role removal processed successfully.\n\n${buildStaffFireEmbed(interaction.guild, targetMember, position, result)}`,
               ),
             ],
           });
@@ -418,6 +414,7 @@ export const staffCommand: SlashCommand = {
         const position = staffRecruitPositionSchema.parse(
           interaction.options.getString('role', true),
         );
+        assertStaffPositionConfigured(position, guildConfig!);
         const roleIds = resolveRolesForRecruit(position, guildConfig!);
         const result = await applyStaffRoles(
           interaction.guild,
@@ -433,7 +430,7 @@ export const staffCommand: SlashCommand = {
           embeds: [
             successEmbed(
               'Staff Recruitment Updated',
-              `✅ Staff recruitment processed successfully.\n\n${buildStaffRecruitEmbed(interaction.guild, targetMember, position, result)}`,
+              `${CUSTOM_EMOJIS.done} Staff recruitment processed successfully.\n\n${buildStaffRecruitEmbed(interaction.guild, targetMember, position, result)}`,
             ),
           ],
         });
@@ -501,7 +498,7 @@ export const staffCommand: SlashCommand = {
           embeds: [
             infoEmbed(
               'Staff Work Statistics',
-              `✅ Staff work statistics generated successfully.\n\nNo attendance records found for **${tournament.name}**.`,
+              `${CUSTOM_EMOJIS.done} Staff work statistics generated successfully.\n\nNo attendance records found for **${tournament.name}**.`,
             ),
           ],
         });

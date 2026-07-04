@@ -6,8 +6,8 @@ export const staffConfigSetSchema = z.object({
   staff_role_id: snowflake,
   judge_role_id: snowflake,
   recorder_role_id: snowflake,
-  t1_admin_role_id: snowflake,
-  t2_admin_role_id: snowflake,
+  t1_admin_role_id: snowflake.optional(),
+  t2_admin_role_id: snowflake.optional(),
   best_staff_role_id: snowflake,
   server_helper_role_id: snowflake,
   manager_role_id: snowflake,
@@ -17,7 +17,6 @@ export const staffConfigSetSchema = z.object({
   staff_announcement_channel_id: snowflake,
   staff_instructions_channel_id: snowflake,
   staff_details_channel_id: snowflake,
-  event_rules_channel_id: snowflake,
 });
 
 export type StaffConfigSet = z.infer<typeof staffConfigSetSchema>;
@@ -38,7 +37,6 @@ export const staffConfigEditSchema = z
     staff_announcement_channel_id: snowflake.optional(),
     staff_instructions_channel_id: snowflake.optional(),
     staff_details_channel_id: snowflake.optional(),
-    event_rules_channel_id: snowflake.optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), {
     message: 'At least one staff setting must be provided.',
@@ -46,6 +44,7 @@ export const staffConfigEditSchema = z
 
 export type StaffConfigEdit = z.infer<typeof staffConfigEditSchema>;
 
+/** All staff config columns — including optional tier admin roles. */
 export const STAFF_FIELD_KEYS = [
   'staff_role_id',
   'judge_role_id',
@@ -61,7 +60,11 @@ export const STAFF_FIELD_KEYS = [
   'staff_announcement_channel_id',
   'staff_instructions_channel_id',
   'staff_details_channel_id',
-  'event_rules_channel_id',
 ] as const;
+
+/** Required for `/staff config set` and `isStaffConfigured` — tier admin roles are optional. */
+export const STAFF_REQUIRED_FIELD_KEYS = STAFF_FIELD_KEYS.filter(
+  (key) => key !== 't1_admin_role_id' && key !== 't2_admin_role_id',
+);
 
 export type StaffFieldKey = (typeof STAFF_FIELD_KEYS)[number];

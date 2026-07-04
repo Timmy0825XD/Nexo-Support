@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { parseScheduleUtcInstant } from '../utils/schedule-datetime.js';
+import {
+  hasMinimumScheduleLeadTime,
+  parseScheduleUtcInstant,
+} from '../utils/schedule-datetime.js';
+
+const SCHEDULE_TOO_SOON_MESSAGE = 'The schedule time must be at least 10 minutes from now.';
 
 const snowflake = z.string().min(17).max(20);
 
@@ -26,6 +31,14 @@ export const scheduleCreateSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'The provided date and time is not a valid UTC datetime.',
+      });
+      return;
+    }
+
+    if (!hasMinimumScheduleLeadTime(date)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: SCHEDULE_TOO_SOON_MESSAGE,
       });
     }
   });
@@ -158,6 +171,10 @@ export function applyScheduleEditDateTime(
     date.getUTCMinutes() !== minute
   ) {
     throw new Error('The provided date and time is not a valid UTC datetime.');
+  }
+
+  if (date.getTime() !== current.getTime() && !hasMinimumScheduleLeadTime(date)) {
+    throw new Error(SCHEDULE_TOO_SOON_MESSAGE);
   }
 
   return date;

@@ -1,5 +1,5 @@
 import { EmbedBuilder, type Guild } from 'discord.js';
-import { EMBED_COLORS } from '../constants/emojis.js';
+import { CUSTOM_EMOJIS, EMBED_COLORS } from '../constants/emojis.js';
 import type { MatchRow } from '../types/match.js';
 import type { StaffAssignmentRow } from '../types/schedule.js';
 import type { TournamentRow } from '../types/tournament.js';
@@ -14,13 +14,8 @@ import {
   formatScheduleUtcLine,
 } from './schedule-display.js';
 
-function formatResultEmbedTitle(
-  team1Name: string,
-  team2Name: string,
-  titleMessageUrl?: string | null,
-): string {
-  const text = `🏆 ${team1Name.trim().toUpperCase()} 🆚 ${team2Name.trim().toUpperCase()}`;
-  return titleMessageUrl ? `[${text}](${titleMessageUrl})` : text;
+function formatResultEmbedTitle(team1Name: string, team2Name: string): string {
+  return `${CUSTOM_EMOJIS.trophy} ${team1Name.trim().toUpperCase()} ${CUSTOM_EMOJIS.vs} ${team2Name.trim().toUpperCase()}`;
 }
 
 function formatCaptainLine(
@@ -109,17 +104,15 @@ export function buildScheduleResultEmbed(params: ScheduleResultEmbedParams): Emb
 
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.success)
-    .setTitle(
-      formatResultEmbedTitle(
-        params.match.team1_name,
-        params.match.team2_name,
-        params.titleMessageUrl,
-      ),
-    )
+    .setTitle(formatResultEmbedTitle(params.match.team1_name, params.match.team2_name))
     .setDescription(lines.join('\n'))
     .setFooter({
       text: formatResultEmbedFooter(params.declaredByUsername, params.declaredAt),
     });
+
+  if (params.titleMessageUrl) {
+    embed.setURL(params.titleMessageUrl);
+  }
 
   if (params.thumbnailUrl) {
     embed.setImage(params.thumbnailUrl);
@@ -149,7 +142,7 @@ export function buildScheduleResultTicketContent(captainIds: string[]): Schedule
 }
 
 export function buildScheduleResultSuccessMessage(guild: Guild, resultChannelId: string): string {
-  return `✅ Match result posted to ${formatChannel(guild, resultChannelId)}.`;
+  return `${CUSTOM_EMOJIS.done} Match result posted to ${formatChannel(guild, resultChannelId)}.`;
 }
 
 export function buildScheduleResultDeleteConfirmation(matchLabel: string, reason?: string): string {

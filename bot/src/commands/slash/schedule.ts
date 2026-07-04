@@ -555,8 +555,12 @@ async function handleUpdate(
   let scheduledAt: Date | undefined;
   try {
     scheduledAt = applyScheduleUpdateDateTime(input, schedule.scheduled_at);
-  } catch {
-    throw new ScheduleError('The provided date and time is not a valid UTC datetime.');
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'The provided date and time is not a valid UTC datetime.';
+    throw new ScheduleError(message);
   }
 
   const { schedule: updated } = await updateSchedule({

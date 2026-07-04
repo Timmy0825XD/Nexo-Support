@@ -9,7 +9,7 @@ export function isGroupStageMatch(group: string): boolean {
 export function isEliminationStageMatch(group: string): boolean {
   if (group.startsWith('Stage 2')) return true;
   if (group.startsWith('Winners') || group.startsWith('Losers')) return true;
-  if (group === 'Grand Finals') return true;
+  if (group === 'Grand Finals' || group === 'Semifinals' || group === 'Third Place') return true;
   if (/^Round \d+$/i.test(group.trim())) return true;
   return false;
 }

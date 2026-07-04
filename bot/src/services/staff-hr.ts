@@ -5,7 +5,33 @@ import {
   roleManagementErrorMessage,
   validateRoleManagement,
 } from '../utils/role-hierarchy.js';
-import { formatRole, formatRoleList } from '../utils/guild-display.js';
+import { formatRole, formatRoleList, DELETED_CHANNEL } from '../utils/guild-display.js';
+
+export class StaffPositionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StaffPositionError';
+  }
+}
+
+const T1_POSITIONS = new Set<string>(['T1 Admin', 'T1 Admin + Helper + Best Staff']);
+const T2_POSITIONS = new Set<string>(['T2 Admin', 'T2 Admin + Helper + Best Staff']);
+
+export function assertStaffPositionConfigured(
+  position: StaffRecruitPosition | StaffFirePosition,
+  config: GuildRow,
+): void {
+  if (T1_POSITIONS.has(position) && !config.t1_admin_role_id) {
+    throw new StaffPositionError(
+      'T1 Admin role is not configured. Set it with `/staff config edit t1_admin_role:` before using this position.',
+    );
+  }
+  if (T2_POSITIONS.has(position) && !config.t2_admin_role_id) {
+    throw new StaffPositionError(
+      'T2 Admin role is not configured. Set it with `/staff config edit t2_admin_role:` before using this position.',
+    );
+  }
+}
 
 function uniqueRoleIds(ids: Array<string | null | undefined>): string[] {
   return [...new Set(ids.filter((id): id is string => Boolean(id)))];
@@ -17,7 +43,7 @@ function formatStaffWelcomeChannel(
 ): string {
   if (!channelId) return 'Not configured';
   const channel = guild.channels.cache.get(channelId);
-  if (!channel) return '❌ Deleted Channel';
+  if (!channel) return DELETED_CHANNEL;
   return `・ <#${channel.id}>`;
 }
 

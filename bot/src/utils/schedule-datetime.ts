@@ -1,4 +1,7 @@
 /** Parse schedule instants as UTC regardless of Postgres/Supabase string format. */
+export const MIN_SCHEDULE_CREATE_LEAD_MINUTES = 10;
+export const MIN_SCHEDULE_CREATE_LEAD_MS = MIN_SCHEDULE_CREATE_LEAD_MINUTES * 60 * 1000;
+
 export function parseScheduleUtcInstant(value: string | Date): Date {
   if (value instanceof Date) {
     return new Date(value.getTime());
@@ -23,3 +26,13 @@ export function parseScheduleUtcInstant(value: string | Date): Date {
 export function scheduleUtcUnixSeconds(value: string | Date): number {
   return Math.floor(parseScheduleUtcInstant(value).getTime() / 1000);
 }
+
+export function hasMinimumScheduleLeadTime(
+  scheduledAt: Date,
+  now: Date = new Date(),
+): boolean {
+  return scheduledAt.getTime() >= now.getTime() + MIN_SCHEDULE_CREATE_LEAD_MS;
+}
+
+/** @deprecated Use hasMinimumScheduleLeadTime */
+export const hasMinimumScheduleCreateLeadTime = hasMinimumScheduleLeadTime;

@@ -5,6 +5,10 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import type { MatchRow } from '../types/match.js';
 import { SCHEDULE_THUMBNAIL_BACKGROUNDS } from '../constants/schedule-thumbnail-backgrounds.js';
 import { parseScheduleUtcInstant } from './schedule-datetime.js';
+import {
+  getImportantMatchThumbnailBadge,
+  resolveImportantMatchKind,
+} from './important-match.js';
 
 const OUTPUT_WIDTH = 1920;
 const OUTPUT_HEIGHT = 1080;
@@ -46,6 +50,8 @@ const TOURNAMENT_FONT_MAX = 78;
 const TOURNAMENT_FONT_MIN = 48;
 
 type CanvasContext = ReturnType<ReturnType<typeof createCanvas>['getContext']>;
+type CanvasTextAlign = CanvasContext['textAlign'];
+type CanvasTextBaseline = CanvasContext['textBaseline'];
 
 interface ThumbnailRotationState {
   lastBackground: string | null;
@@ -143,6 +149,11 @@ function extractDisplayGroup(group: string): string | null {
 }
 
 export function formatThumbnailRoundGroup(round: string, group: string): string {
+  const importantKind = resolveImportantMatchKind({ round, group });
+  if (importantKind) {
+    return getImportantMatchThumbnailBadge(importantKind);
+  }
+
   const roundLabel = normalizeRoundNumber(round);
   const displayGroup = extractDisplayGroup(group);
 
