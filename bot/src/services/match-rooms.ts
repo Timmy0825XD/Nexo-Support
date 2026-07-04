@@ -7,12 +7,13 @@ import {
   type TextChannel,
 } from 'discord.js';
 import type { GuildRow } from '../types/guild.js';
-import type { MatchListRow } from '../types/match.js';
+import { MATCH_LIST_COLUMNS, type MatchListRow } from '../types/match.js';
 import type { TournamentRow } from '../types/tournament.js';
 import {
   findParticipantsByBracketNames,
   normalizeParticipantName,
 } from './sheets.js';
+import { isMatchReadyForRoom } from './matches.js';
 import { buildTicketTopic } from './tickets.js';
 import { sendMatchTicketWelcome } from '../utils/match-ticket-welcome.js';
 import { buildTicketChannelName } from '../utils/ticket-channel-name.js';
@@ -50,7 +51,114 @@ export interface CreateRoomsResult {
   errors: string[];
 }
 
+export interface RepairedRoomResult extends CreateRoomsResult {
+  deleted: CreatedRoomResult[];
+}
+
 const MAX_CATEGORY_CHANNELS = 50;
+
+function hasMatchRoomIdentityChanged(before: MatchListRow, after: MatchListRow): boolean {
+  return (
+    before.team1_name !== after.team1_name ||
+    before.team2_name !== after.team2_name ||
+    before.round !== after.round ||
+    before.group !== after.group
+  );
+}
+
+async function isRoomChannelOutdated(guild: Guild, match: MatchListRow): Promise<boolean> {
+  if (!match.ticket_channel_id) return false;
+  const expectedName = buildTicketChannelName(match);
+  const channel = await guild.channels.fetch(match.ticket_channel_id).catch(() => null);
+  if (!channel) return true;
+  return channel.name !== expectedName;
+}
+
+export async function listOpenMatchRoomSnapshots(
+  supabase: SupabaseClient,
+  tournamentId: string,
+): Promise<MatchListRow[]> {
+  const { data: roomRows, error: roomError } = await supabase
+    .from('match_rooms')
+    .select('match_id')
+    .eq('tournament_id', tournamentId);
+
+  if (roomError) {
+    throw new Error(`Failed to load match room snapshots: ${roomError.message}`);
+  }
+
+  const matchIds = [...new Set((roomRows ?? []).map((row) => row.match_id as string))];
+  if (matchIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('matches')
+    .select(MATCH_LIST_COLUMNS)
+    .eq('tournament_id', tournamentId)
+    .in('id', matchIds);
+
+  if (error) {
+    throw new Error(`Failed to load match room matches: ${error.message}`);
+  }
+
+  return ((data as MatchListRow[]) ?? []).filter(
+    (match) => match.status !== 'completed' && Boolean(match.ticket_channel_id),
+  );
+}
+
+async function deleteRoomForChangedMatch(params: {
+  guild: Guild;
+  supabase: SupabaseClient;
+  match: MatchListRow;
+}): Promise<CreatedRoomResult> {
+  const { data: roomRows, error: roomError } = await params.supabase
+    .from('match_rooms')
+    .select('id, channel_id')
+    .eq('match_id', params.match.id);
+
+  if (roomError) {
+    throw new Error(`Failed to load room for changed match: ${roomError.message}`);
+  }
+
+  const channelIds = [
+    ...new Set([
+      params.match.ticket_channel_id,
+      ...(roomRows ?? []).map((row) => row.channel_id as string),
+    ].filter((channelId): channelId is string => Boolean(channelId))),
+  ];
+
+  for (const channelId of channelIds) {
+    const channel = await params.guild.channels.fetch(channelId).catch(() => null);
+    if (channel) {
+      await channel
+        .delete('Bracket correction changed the match participants')
+        .catch(() => undefined);
+    }
+  }
+
+  const { error: deleteError } = await params.supabase
+    .from('match_rooms')
+    .delete()
+    .eq('match_id', params.match.id);
+
+  if (deleteError) {
+    throw new Error(`Failed to delete changed match room record: ${deleteError.message}`);
+  }
+
+  const { error: updateError } = await params.supabase
+    .from('matches')
+    .update({ ticket_channel_id: null, updated_at: new Date().toISOString() })
+    .eq('id', params.match.id);
+
+  if (updateError) {
+    throw new Error(`Failed to clear changed match ticket channel: ${updateError.message}`);
+  }
+
+  return {
+    matchId: params.match.id,
+    channelId: params.match.ticket_channel_id ?? channelIds[0] ?? '',
+    channelName: buildTicketChannelName(params.match),
+  };
+}
 
 function collectOpenCategoryIds(tournament: TournamentRow): string[] {
   return [
@@ -312,6 +420,88 @@ async function createRoomsForMatchesUnlocked(params: {
   }
 
   return result;
+}
+
+export async function repairChangedMatchRooms(params: {
+  guild: Guild;
+  supabase: SupabaseClient;
+  tournament: TournamentRow;
+  guildConfig: GuildRow | null;
+  beforeMatches: MatchListRow[];
+}): Promise<RepairedRoomResult> {
+  return withTournamentRoomCreationLock(params.tournament.id, async () => {
+    const result: RepairedRoomResult = {
+      deleted: [],
+      created: [],
+      skipped: [],
+      warnings: [],
+      errors: [],
+    };
+
+    if (params.beforeMatches.length === 0) return result;
+
+    const beforeById = new Map(params.beforeMatches.map((match) => [match.id, match]));
+    const afterMatches = await listOpenMatchRoomSnapshots(params.supabase, params.tournament.id);
+    const changedMatches: MatchListRow[] = [];
+
+    for (const match of afterMatches) {
+      const before = beforeById.get(match.id);
+      if (
+        before
+          ? hasMatchRoomIdentityChanged(before, match)
+          : await isRoomChannelOutdated(params.guild, match)
+      ) {
+        changedMatches.push(match);
+      }
+    }
+
+    if (changedMatches.length === 0) return result;
+
+    const failedDeleteIds = new Set<string>();
+    for (const match of changedMatches) {
+      try {
+        const deleted = await deleteRoomForChangedMatch({
+          guild: params.guild,
+          supabase: params.supabase,
+          match,
+        });
+        result.deleted.push(deleted);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown room deletion error.';
+        failedDeleteIds.add(match.id);
+        result.errors.push(`${match.team1_name} vs ${match.team2_name}: ${message}`);
+      }
+    }
+
+    const recreateMatches = changedMatches
+      .filter((match) => match.status === 'open')
+      .filter((match) => isMatchReadyForRoom(match.team1_name, match.team2_name))
+      .filter((match) => !failedDeleteIds.has(match.id))
+      .map((match) => ({ ...match, ticket_channel_id: null }));
+
+    if (recreateMatches.length === 0) return result;
+
+    try {
+      const category = await resolveAutoCategory(params.guild, params.tournament);
+      const recreated = await createRoomsForMatchesUnlocked({
+        guild: params.guild,
+        supabase: params.supabase,
+        tournament: params.tournament,
+        guildConfig: params.guildConfig,
+        matches: recreateMatches,
+        categoryId: category.id,
+      });
+      result.created.push(...recreated.created);
+      result.skipped.push(...recreated.skipped);
+      result.warnings.push(...recreated.warnings);
+      result.errors.push(...recreated.errors);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown room recreation error.';
+      result.errors.push(message);
+    }
+
+    return result;
+  });
 }
 
 export async function runAutoRoomCreation(params: {

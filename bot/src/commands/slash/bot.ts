@@ -41,8 +41,7 @@ export const botCommand: SlashCommand = {
       const guildName = interaction.guild.name;
 
       const embed = infoEmbed(
-        `Created with ❤️ for - ${guildName} -`,
-        '✅ Bot information retrieved successfully.',
+        `Created with ${CUSTOM_EMOJIS.love} for - ${guildName} -`,
       )
         .setColor(EMBED_COLORS.success)
         .setThumbnail(client.user?.displayAvatarURL() ?? null)
@@ -51,12 +50,12 @@ export const botCommand: SlashCommand = {
           embedField('ID', client.user?.id ?? 'Unknown', true),
           embedField('Created On', createdAt, false),
           embedField(`${CUSTOM_EMOJIS.servers} Servers`, `\`${client.guilds.cache.size}\``, true),
-          embedField('Members', `\`${totalMembers}\``, true),
-          embedField('Uptime', formatUptime(), true),
-          embedField('Memory Usage', formatMemoryUsage(), true),
-          embedField('Platform', process.platform, true),
-          embedField('Node', process.version, true),
-          embedField('Bot Version', getBotVersion(), true),
+          embedField(`${CUSTOM_EMOJIS.team_member} Members`, `\`${totalMembers}\``, true),
+          embedField(`${CUSTOM_EMOJIS.uptime} Uptime`, formatUptime(), true),
+          embedField(`${CUSTOM_EMOJIS.memory} Memory Usage`, formatMemoryUsage(), true),
+          embedField(`${CUSTOM_EMOJIS.platform} Platform`, process.platform, true),
+          embedField(`${CUSTOM_EMOJIS.node} Node`, process.version, true),
+          embedField(`${CUSTOM_EMOJIS.version} Bot Version`, getBotVersion(), true),
         );
 
       await interaction.editReply({ embeds: [embed] });

@@ -154,7 +154,6 @@ export function validateStaffResources(guild: Guild, staff: StaffConfigSet | Sta
     { id: staff.staff_announcement_channel_id, label: 'Staff announcement channel' },
     { id: staff.staff_instructions_channel_id, label: 'Staff instructions channel' },
     { id: staff.staff_details_channel_id, label: 'Staff details channel' },
-    { id: staff.event_rules_channel_id, label: 'Event rules channel' },
   ];
 
   for (const { id, label } of staffChannels) {

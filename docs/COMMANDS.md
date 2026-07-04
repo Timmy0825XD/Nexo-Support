@@ -74,6 +74,8 @@ Detalle por comando: secciones [`/auto_room *`](#auto_room-run), [`/room create`
 | [`/tournament list`](#tournament-list) | Tournament | Admin |
 | [`/upload_score`](#upload_score) | Tournament | Admin, Organiser |
 | [`/schedule create`](#schedule-create) | Schedule | Admin, Organiser, Helper |
+| [`/schedule update`](#schedule-update) | Schedule | Admin, Organiser, Helper |
+| [`/schedule show`](#schedule-show) | Schedule | Staff |
 | [`/schedule delete`](#schedule-delete) | Schedule | Helper |
 | [`/schedule unassigned`](#schedule-unassigned) | Schedule | Staff |
 | [`/schedule refresh`](#schedule-refresh) | Schedule | Staff |
@@ -163,6 +165,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 - Creates one row in `attendance` linked to `tournament_id`, `match_id`, and `ticket_channel_id`.
 - Posts the **same public embed** in the ticket channel and in `tournaments.attendance_channel_id`.
 - Stores Discord message IDs for both embeds (`ticket_message_id`, `attendance_channel_message_id`) for later sync.
+- No separate command confirmation message — only the detailed attendance embed is posted.
 
 **Metrics rule:** 1 attendance = **1 round**; **matches** = `team1_score + team2_score`.
 
@@ -269,6 +272,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 - Only the attendance `recorder_discord_id` may add links.
 - URL must be **YouTube**; max **7** links per attendance.
 - Updates both attendance embeds after success.
+- If `events_links_channel_id` is configured on the tournament, posts a plain-text summary of the new link(s) to that channel.
 
 **Database:** `attendance.recording_links` (JSON array).
 
@@ -287,7 +291,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | tournament | STRING (Autocomplete) | Yes |
 | match | STRING (Autocomplete) | Yes |
 
-**Behavior:** Removes all links at once, syncs embeds, audit log.
+**Behavior:** Removes all links at once, syncs embeds, audit log. If the tournament has `events_links_channel_id` configured, also deletes the bot's recording-link posts for that match in that channel.
 
 ---
 
@@ -582,14 +586,15 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 - Replaces incorrect bracket score
 - Recalculates winner
 - Updates bracket system
+- If a downstream open room changed participants, deletes the stale room and recreates it with the corrected teams
 
 **Validation:** Match must exist, prevent invalid scores, prevent unsupported draws.
 
 **Dependencies:** Tournament bracket API, attendance records.
 
-**Database:** `matches`, `bracket_corrections`.
+**Database:** `matches`, `match_rooms`, `bracket_corrections`.
 
-**Features:** Match autocomplete, score correction logging, bracket synchronization, winner recalculation.
+**Features:** Match autocomplete, score correction logging, bracket synchronization, winner recalculation, downstream room repair.
 
 ---
 
@@ -749,10 +754,12 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | close_ticket_category_2 | CATEGORY | No |
 | ticket_open_category_3 | CATEGORY | No |
 | ticket_open_category_4 | CATEGORY | No |
+| events_links | CHANNEL | No |
 
 **Behavior:**
 
 - Registers tournament configuration
+- Optional `events_links` channel receives plain-text recording-link summaries on `/link add` and initial mark links
 - Validates Challonge credentials and Google Sheet headers
 - Connects bracket API and stores encrypted key
 - Configures ticket system channels and categories
@@ -827,6 +834,7 @@ Guild configuration groups follow **setup/set** (full) → **edit** (partial) �
 | ticket_open_category_3 | CATEGORY | No | New third ticket category |
 | ticket_open_category_4 | CATEGORY | No | New fourth ticket category |
 | auto_room_creation | BOOLEAN | No | Enable/disable automatic room creation |
+| events_links | CHANNEL | No | Channel where match recording links are published |
 
 **Behavior:**
 
@@ -973,6 +981,7 @@ Run In Ticket → Validate Permissions → Report Challonge Score
 - Match ticket channels only
 - Bot denies usage outside match tickets
 - Server must configure a **schedule channel** via `/staff config` before use
+- Scheduled UTC date/time must be at least **10 minutes after** the command invocation time
 
 **Usage example:**
 
@@ -996,6 +1005,7 @@ Run In Ticket → Validate Permissions → Report Challonge Score
 **Features:**
 
 - Automatic UTC & local time conversion
+- Rejects schedules less than 10 minutes from the current time
 - Auto-generated match thumbnail/banner
 - Team/player mentions, judge/recorder assignment support
 - Schedule embed creation and notification system
@@ -1032,6 +1042,66 @@ After:  🔴semi2_haideptrai9061_vs_souelkady
 
 ---
 
+### `/schedule update`
+
+**Description:** Update an existing match schedule (datetime, staff, note, or thumbnail).
+
+**Channel restriction:** Match ticket channels only.
+
+**Permissions:** Admins, Organisers, Helpers (same as create).
+
+**Options:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| hour | INTEGER | No | New hour (0–23 UTC) |
+| minute | INTEGER | No | New minute (0–59) |
+| day | INTEGER | No | New day |
+| month | INTEGER | No | New month (1–12) |
+| year | INTEGER | No | New year (2025–2030) |
+| judge | USER | No | Assign or replace judge |
+| recorder | USER | No | Assign or replace recorder |
+| note | STRING | No | Update schedule note (max 130) |
+| remove_judge | BOOLEAN | No | Remove current judge |
+| remove_recorder | BOOLEAN | No | Remove current recorder |
+| reason | STRING | No | Reason for the update (audit log) |
+| regenerate_image | BOOLEAN | No | Regenerate schedule thumbnail |
+
+**Validation:**
+
+- At least one field must be provided.
+- If the datetime changes, the new UTC time must be at least **10 minutes after** the command invocation time.
+- Selected judge/recorder must hold the configured staff roles.
+
+**Behavior:**
+
+- Updates schedule embeds in the ticket and schedule channel.
+- Resets reminder/urgent workflow when `scheduled_at` changes (deletes prior reminder/urgent messages).
+- No separate command confirmation message — success is audit-logged only (`deleteReply`).
+
+**Database:** `schedules`, `staff_assignments`.
+
+---
+
+### `/schedule show`
+
+**Description:** Preview the schedule channel embed for a specific tournament match (staff debugging / lookup).
+
+**Permissions:** Staff (Judge, Recorder, Helper, Admin, Organiser).
+
+**Options:**
+
+| Name | Type | Required |
+|---|---|---|
+| tournament | STRING (Autocomplete) | Yes |
+| match | STRING (Autocomplete) | Yes |
+
+**Behavior:** Returns an ephemeral embed matching the schedule channel post for the selected match. Fails if no schedule exists.
+
+**Database:** `schedules`, `staff_assignments`.
+
+---
+
 ### Staff reminder flow (automático)
 
 **Description:** 10 minutes before `scheduled_at`, the bot posts a reminder in the **match ticket** with the same schedule data and **Confirmed** buttons for assigned Judge/Recorder. At match time, unconfirmed staff are removed from the ticket and an urgent replacement post is sent to the guild **schedule channel**.
@@ -1046,7 +1116,7 @@ After:  🔴semi2_haideptrai9061_vs_souelkady
 
 **Urgent ping:** Only `@Judge` and/or `@Recorder` guild roles for roles still missing (unassigned or failed to confirm).
 
-**Reschedule:** Changing `scheduled_at` via `/schedule update` resets reminder/urgent state and deletes prior reminder/urgent messages.
+**Reschedule:** Changing `scheduled_at` via `/schedule update` resets reminder/urgent state and deletes prior reminder/urgent messages. The new UTC time must be at least **10 minutes after** the command invocation time.
 
 **Worker:** `bot/src/workers/schedule-reminder.ts` — 60s tick, same pattern as auto-room.
 
@@ -1255,7 +1325,7 @@ haideptrai9061 vs Souelkady | The Brave Sailor Season 3 | 2026-05-21 15:00 UTC
 - Tournament must have `result_channel_id` configured
 - Only one result per schedule
 
-**Output:** Results embed + proof images posted to `#tournament-results`. Ephemeral confirmation in the ticket.
+**Output:** Results embed + proof images posted to `#tournament-results`. The results embed title is clickable (Discord embed `url`) and opens the ticket transcript message. Ephemeral confirmation in the ticket.
 
 ---
 
@@ -1307,7 +1377,7 @@ Server-wide configuration (`guilds` table): bot admin role, log channels, transc
 | `challonge_logs` | Bracket and Challonge actions |
 | `transcript_logs` | Ticket transcript HTML files (not audit logs) |
 
-Audit logs use structured **embeds** in English (`Triggered By`, `UTC Time`, event fields).
+Audit logs use structured **embeds** in English (`Triggered By`, `UTC Time`, event fields). Each embed uses the triggering user's avatar as **thumbnail** when available.
 
 ---
 
@@ -1529,7 +1599,7 @@ Staff hierarchy, operational roles, and internal channels (`guilds` table). Comp
 
 | Command | Usage |
 |---|---|
-| `/staff config set` | **Initial full setup** — 15 required fields |
+| `/staff config set` | **Initial full setup** — 13 required fields, T1/T2 admin optional |
 | `/staff config edit` | **Partial update** — only provided fields |
 | `/staff config view` | View current staff configuration (read-only) |
 
@@ -1552,8 +1622,8 @@ Staff hierarchy, operational roles, and internal channels (`guilds` table). Comp
 | staff_role | ROLE | Yes | Main tournament staff role |
 | judge_role | ROLE | Yes | Judge role used for match assignments |
 | recorder_role | ROLE | Yes | Recorder role used for match recordings |
-| t1_admin_role | ROLE | Yes | Tier 1 tournament administrator role |
-| t2_admin_role | ROLE | Yes | Tier 2 tournament administrator role |
+| t1_admin_role | ROLE | No | Tier 1 tournament administrator role (optional) |
+| t2_admin_role | ROLE | No | Tier 2 tournament administrator role (optional) |
 | best_staff_role | ROLE | Yes | Recognition role for outstanding staff members |
 | server_helper_role | ROLE | Yes | General helper/support staff role |
 | manager_role | ROLE | Yes | Staff management role |
@@ -1563,7 +1633,6 @@ Staff hierarchy, operational roles, and internal channels (`guilds` table). Comp
 | staff_announcement_channel | CHANNEL | Yes | Staff announcements channel |
 | staff_instructions_channel | CHANNEL | Yes | Staff instructions and guidelines channel |
 | staff_details_channel | CHANNEL | Yes | Staff information and documentation channel |
-| event_rules_channel | CHANNEL | Yes | Event rules and procedures channel |
 
 **Behavior:**
 
@@ -1585,7 +1654,7 @@ Run Command → Validate Permissions → Validate Roles → Validate Channels
 
 **Validation:**
 
-- All fifteen options are required
+- Twelve role/channel options are required; T1 and T2 admin roles are optional
 - All roles must belong to the current server
 - All channels must belong to the current server
 - Bot must have: View Channel, Send Messages, Embed Links on all staff channels
@@ -1611,10 +1680,9 @@ Run Command → Validate Permissions → Validate Roles → Validate Channels
 📢 Announcements: #staff-announcements
 📖 Instructions: #staff-rules
 📋 Details: #staff-info
-📜 Event Rules: #rules
 ```
 
-**Database:** `guilds` — fields updated: `staff_role_id`, `judge_role_id`, `recorder_role_id`, `t1_admin_role_id`, `t2_admin_role_id`, `best_staff_role_id`, `server_helper_role_id`, `manager_role_id`, `challonge_mod_role_id`, `schedule_channel_id`, `staff_chat_channel_id`, `staff_announcement_channel_id`, `staff_instructions_channel_id`, `staff_details_channel_id`, `event_rules_channel_id`.
+**Database:** `guilds` — fields updated: `staff_role_id`, `judge_role_id`, `recorder_role_id`, `t1_admin_role_id`, `t2_admin_role_id`, `best_staff_role_id`, `server_helper_role_id`, `manager_role_id`, `challonge_mod_role_id`, `schedule_channel_id`, `staff_chat_channel_id`, `staff_announcement_channel_id`, `staff_instructions_channel_id`, `staff_details_channel_id`.
 
 **Features:** Centralized staff configuration, staff hierarchy management, schedule channel setup, internal communication setup, runtime configuration refresh, permission validation, audit logging, multi-tournament support.
 
@@ -1650,7 +1718,6 @@ Run Command → Validate Permissions → Validate Roles → Validate Channels
 | staff_announcement_channel | CHANNEL | No | Staff announcements channel |
 | staff_instructions_channel | CHANNEL | No | Staff instructions and guidelines channel |
 | staff_details_channel | CHANNEL | No | Staff information and documentation channel |
-| event_rules_channel | CHANNEL | No | Event rules and procedures channel |
 
 **Behavior:**
 
@@ -1741,7 +1808,7 @@ Run Command → Validate Permissions → Load Staff Configuration
 | Section | Fields |
 |---|---|
 | Staff roles | Manager, Staff, Judge, Recorder, T1 Admin, T2 Admin, Best Staff, Server Helper, Challonge mod |
-| Staff channels | Schedule, Staff Chat, Announcements, Instructions, Details, Event Rules |
+| Staff channels | Schedule, Staff Chat, Announcements, Instructions, Details |
 
 **Example output:**
 
@@ -1789,9 +1856,6 @@ Run Command → Validate Permissions → Load Staff Configuration
 
 📋 Details
 #staff-info
-
-📜 Event Rules
-#rules
 ```
 
 **Validation display:**
@@ -1863,6 +1927,7 @@ Run Command → Validate Administrator → Load Staff Config
 **Validation:**
 
 - Staff configuration must exist
+- T1/T2 Admin positions require the corresponding role to be configured via `/staff config set` or `/staff config edit`
 - Bot role must be above all target roles
 - Discord hierarchy rules apply to every role removal
 
@@ -1930,7 +1995,7 @@ Recorder Role
 - Assigns corresponding role(s) from staff configuration
 - Detects and skips roles the user already has
 - Posts a welcome message in `staffchat_channel` (from `/staff config set`)
-- Welcome message includes assigned position and links to Announcements, Instructions, Details, and Event Rules channels
+- Welcome message includes assigned position and links to Announcements, Instructions, and Details channels
 
 **Welcome message example:**
 
@@ -1945,7 +2010,6 @@ Important Channels:
 • Announcements: #staff-announcements
 • Instructions: #staff-rules
 • Details Submission: #staff-info
-• Event Rules: #rules
 
 We're excited to have you on board!
 ```
@@ -1961,6 +2025,7 @@ Run Command → Validate Administrator → Load Staff Config
 **Validation:**
 
 - Staff configuration must exist
+- T1/T2 Admin positions require the corresponding role to be configured via `/staff config set` or `/staff config edit`
 - Bot role must be above all assignable roles
 - Discord hierarchy rules apply
 
@@ -2686,7 +2751,7 @@ Bot Version: 1.0.0
 | Category | Commands |
 |---|---|
 | 📋 Attendance | `/attendance mark`, `/attendance delete`, `/get attendance`, `/get sheet`, `/link add`, `/link delete`, `/link missing`, `/work_done` |
-| 📅 Schedule | `/schedule create`, `/schedule delete`, `/schedule unassigned`, `/schedule refresh`, `/schedule resign`, `/schedule results`, `/schedule results_delete` |
+| 📅 Schedule | `/schedule create`, `/schedule update`, `/schedule show`, `/schedule delete`, `/schedule unassigned`, `/schedule refresh`, `/schedule resign`, `/schedule results`, `/schedule results_delete` |
 | 🏆 Result | `/result declare`, `/result delete` |
 | 👥 Role | `/role user`, `/role add all`, `/role remove all`, `/role list` |
 | 🌐 Server | `/server info`, `/server banlist` |

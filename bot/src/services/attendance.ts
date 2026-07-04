@@ -13,6 +13,7 @@ import type { TournamentRow } from '../types/tournament.js';
 import {
   buildAttendanceDeletedEmbed,
   buildAttendanceMarkedEmbed,
+  buildEventsRecordingLinksHeader,
   buildEventsRecordingLinksMessage,
   type AttendanceMatchInfo,
 } from '../utils/attendance-display.js';
@@ -379,6 +380,52 @@ async function publishRecordingLinksToEventsChannel(params: {
   );
 }
 
+async function deleteEventsLinksMessagesForAttendance(params: {
+  client: Client;
+  tournament: Pick<TournamentRow, 'events_links_channel_id' | 'name'>;
+  team1Name: string;
+  team2Name: string;
+  team1Score: number;
+  team2Score: number;
+}): Promise<number> {
+  const channelId = params.tournament.events_links_channel_id;
+  if (!channelId) return 0;
+
+  const channel = await params.client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased() || channel.isDMBased()) return 0;
+
+  const botId = params.client.user?.id;
+  if (!botId) return 0;
+
+  const header = buildEventsRecordingLinksHeader({
+    tournamentName: params.tournament.name,
+    team1Name: params.team1Name,
+    team2Name: params.team2Name,
+    team1Score: params.team1Score,
+    team2Score: params.team2Score,
+  });
+
+  let deleted = 0;
+  let before: string | undefined;
+
+  for (let page = 0; page < 5; page += 1) {
+    const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (batch.size === 0) break;
+
+    for (const message of batch.values()) {
+      if (message.author.id !== botId) continue;
+      if (!message.content.startsWith(header)) continue;
+      const removed = await message.delete().then(() => true).catch(() => false);
+      if (removed) deleted += 1;
+    }
+
+    before = batch.last()?.id;
+    if (batch.size < 100) break;
+  }
+
+  return deleted;
+}
+
 function normalizeRecordingLinksInput(links: string[]): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
@@ -684,7 +731,7 @@ export async function deleteAllRecordingLinks(params: {
   guild: Guild;
   tournament: TournamentRow;
   attendanceId: string;
-}): Promise<AttendanceWithMatch & { deletedCount: number }> {
+}): Promise<AttendanceWithMatch & { deletedCount: number; eventsMessagesDeleted: number }> {
   const attendance = await getAttendanceWithDetails(params.supabase, params.attendanceId);
   if (!attendance || attendance.deleted_at) {
     throw new AttendanceNotFoundError();
@@ -737,7 +784,16 @@ export async function deleteAllRecordingLinks(params: {
     attendance: refreshed,
   });
 
-  return { ...refreshed, deletedCount };
+  const eventsMessagesDeleted = await deleteEventsLinksMessagesForAttendance({
+    client: params.client,
+    tournament: params.tournament,
+    team1Name: match.team1_name,
+    team2Name: match.team2_name,
+    team1Score: attendance.team1_score,
+    team2Score: attendance.team2_score,
+  });
+
+  return { ...refreshed, deletedCount, eventsMessagesDeleted };
 }
 
 export async function getAttendanceByTournamentAndMatchLabel(

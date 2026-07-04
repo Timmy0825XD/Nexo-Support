@@ -72,7 +72,6 @@ Configuración por servidor Discord (multi-tenant).
 | `staff_announcement_channel_id` | `TEXT` | Anuncios staff |
 | `staff_instructions_channel_id` | `TEXT` | Instrucciones staff |
 | `staff_details_channel_id` | `TEXT` | Info/documentación staff |
-| `event_rules_channel_id` | `TEXT` | Reglas del evento |
 | `created_at` | `TIMESTAMPTZ` | |
 | `updated_at` | `TIMESTAMPTZ` | |
 
@@ -112,6 +111,7 @@ Configuración completa de un torneo en un servidor.
 | `ticket_open_category_3_id` | `TEXT` | Opcional |
 | `ticket_open_category_4_id` | `TEXT` | Opcional |
 | `auto_room_enabled` | `BOOLEAN` | Default `false` |
+| `events_links_channel_id` | `TEXT` | Canal opcional para publicar links de grabación (`/link add`, borrado con `/link delete`) |
 | `schedules_channel_id` | `TEXT` | Reservado — no usado en v1 de `/schedule create` (ver `result_channel_id`) |
 | `created_at` | `TIMESTAMPTZ` | |
 | `updated_at` | `TIMESTAMPTZ` | |
@@ -198,7 +198,7 @@ Registros de asistencia y trabajo del staff por partido/ticket.
 
 **Índices:** `tournament_id`, `match_id`, `judge_discord_id`, `recorder_discord_id`.
 
-**Comandos:** Attendance completa, `/link *`, `/work_done`, `/get sheet`.
+**Comandos:** Attendance completa, `/link *`, `/work_done`, `/get sheet`. Los links publicados en `events_links` se identifican por torneo + partido + marcador (no hay columna de message ID).
 
 ---
 

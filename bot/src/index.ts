@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Client, Collection, Events, GatewayIntentBits, MessageFlags } from 'discord.js';
 import './utils/uptime.js';
 import { loadPrefixCommands, loadSlashCommands } from './commands/loader.js';
@@ -6,8 +8,10 @@ import type { PrefixCommand, SlashCommand } from './commands/types.js';
 import { initSupabase } from './services/supabase.js';
 import { registerSlashCommands } from './services/register-commands.js';
 import { startAutoRoomWorker } from './workers/auto-room.js';
+import { startBanExpiryWorker } from './workers/ban-expiry.js';
 import { startScheduleReminderWorker } from './workers/schedule-reminder.js';
 import { handleScheduleButton } from './interactions/schedule-buttons.js';
+import { handleUtilityEmbedInteraction } from './interactions/utility-embed-builder.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -18,12 +22,58 @@ function requireEnv(name: string): string {
   return value;
 }
 
+const devLockPath = join(process.cwd(), '.dev-bot.lock');
+
+function assertSingleDevInstance(): void {
+  if (process.env.DISCORD_SKIP_COMMAND_SYNC !== '1') return;
+
+  if (existsSync(devLockPath)) {
+    const existingPid = Number(readFileSync(devLockPath, 'utf8'));
+    if (existingPid !== process.pid) {
+      try {
+        process.kill(existingPid, 0);
+        console.error(
+          `Another bot dev instance is already running (PID ${existingPid}). Stop it before starting a new one.`,
+        );
+        process.exit(1);
+      } catch {
+        unlinkSync(devLockPath);
+      }
+    }
+  }
+
+  writeFileSync(devLockPath, String(process.pid));
+
+  const releaseDevLock = (): void => {
+    try {
+      if (existsSync(devLockPath) && readFileSync(devLockPath, 'utf8') === String(process.pid)) {
+        unlinkSync(devLockPath);
+      }
+    } catch {
+      // ignore lock cleanup errors
+    }
+  };
+
+  process.on('exit', releaseDevLock);
+  process.on('SIGINT', releaseDevLock);
+  process.on('SIGTERM', releaseDevLock);
+}
+
 const token = requireEnv('DISCORD_TOKEN');
 const clientId = requireEnv('DISCORD_CLIENT_ID');
 const supabaseUrl = requireEnv('SUPABASE_URL');
 const supabaseServiceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
 
 const supabase = initSupabase(supabaseUrl, supabaseServiceRoleKey);
+
+const globalClientRef = globalThis as typeof globalThis & {
+  __nexoDiscordClient?: Client;
+};
+
+if (globalClientRef.__nexoDiscordClient) {
+  globalClientRef.__nexoDiscordClient.removeAllListeners();
+  globalClientRef.__nexoDiscordClient.destroy();
+}
 
 const client = new Client({
   intents: [
@@ -33,6 +83,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
   ],
 });
+
+globalClientRef.__nexoDiscordClient = client;
 
 const slashCommands = new Collection<string, SlashCommand>();
 const prefixCommands = new Collection<string, PrefixCommand>();
@@ -61,8 +113,20 @@ async function syncSlashCommands(): Promise<void> {
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Bot logged in as ${readyClient.user.tag}`);
+
+  if (skipCommandSync) {
+    const count = slashCommands.size;
+    const devGuildId = process.env.DISCORD_GUILD_ID;
+    if (devGuildId) {
+      console.log(`Registered ${count} guild slash command(s) in ${devGuildId}`);
+    } else {
+      console.log(`Registered ${count} global slash command(s)`);
+    }
+  }
+
   startAutoRoomWorker(client, supabase);
   startScheduleReminderWorker(client, supabase);
+  startBanExpiryWorker(client, supabase);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -88,14 +152,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.isModalSubmit()) {
+    try {
+      const handled = await handleUtilityEmbedInteraction(interaction);
+      if (handled) return;
+    } catch (error) {
+      console.error('Modal interaction failed:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction
+          .reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral })
+          .catch(() => undefined);
+      }
+    }
+    return;
+  }
+
   if (interaction.isButton()) {
     try {
+      const handledEmbed = await handleUtilityEmbedInteraction(interaction);
+      if (handledEmbed) return;
+
       const handled = await handleScheduleButton(interaction, supabase);
       if (handled) return;
     } catch (error) {
       console.error('Button interaction failed:', error);
       if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => undefined);
+        await interaction
+          .reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral })
+          .catch(() => undefined);
       }
     }
     return;
@@ -145,9 +229,15 @@ client.on(Events.MessageCreate, async (message) => {
   }
 });
 
+const skipCommandSync = process.env.DISCORD_SKIP_COMMAND_SYNC === '1';
+
 try {
-  await syncSlashCommands();
+  assertSingleDevInstance();
   await client.login(token);
+
+  if (!skipCommandSync) {
+    await syncSlashCommands();
+  }
 } catch (error) {
   console.error('Failed to start bot:', error);
   process.exit(1);

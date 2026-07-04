@@ -9,6 +9,7 @@ import {
 import { EMBED_COLORS } from '../constants/emojis.js';
 import type { HelpCategory } from './bot-info.js';
 import { formatHelpEntry } from './bot-info.js';
+import { applyPaginationBackButton, applyPaginationNextButton, setButtonLabelWithEmoji } from './pagination-buttons.js';
 
 export const HELP_PAGINATION_TIMEOUT_MS = 2 * 60 * 1000;
 
@@ -48,7 +49,7 @@ export function buildHelpEmbed(
     .setTitle(category.title)
     .setDescription(`*${category.subtitle}*\n\n${body}`.slice(0, 4096))
     .setFooter({
-      text: `🛡️ Category ${pageIndex + 1} of ${totalPages} • ${botName} Help System`,
+      text: `📚 Category ${pageIndex + 1} of ${totalPages} • ${botName} Help System`,
     });
 }
 
@@ -62,21 +63,25 @@ export function buildHelpComponents(
   const category = categories[pageIndex]!;
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(HELP_PREV_ID)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel('◀')
-      .setDisabled(locked || atStart),
-    new ButtonBuilder()
-      .setCustomId(HELP_PAGE_ID)
-      .setStyle(ButtonStyle.Primary)
-      .setLabel(category.buttonLabel)
-      .setDisabled(true),
-    new ButtonBuilder()
-      .setCustomId(HELP_NEXT_ID)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel('▶▶')
-      .setDisabled(locked || atEnd),
+    applyPaginationBackButton(
+      new ButtonBuilder()
+        .setCustomId(HELP_PREV_ID)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(locked || atStart),
+    ),
+    setButtonLabelWithEmoji(
+      new ButtonBuilder()
+        .setCustomId(HELP_PAGE_ID)
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(true),
+      category.buttonLabel,
+    ),
+    applyPaginationNextButton(
+      new ButtonBuilder()
+        .setCustomId(HELP_NEXT_ID)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(locked || atEnd),
+    ),
   );
 }
 

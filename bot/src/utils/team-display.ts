@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { EMBED_COLORS } from '../constants/emojis.js';
+import { EMBED_COLORS, CUSTOM_EMOJIS } from '../constants/emojis.js';
 import type { ParsedParticipant, TeamPlayer } from '../types/participant.js';
 import type { TournamentRow } from '../types/tournament.js';
 import { embedField } from './embeds.js';
@@ -21,7 +21,7 @@ function formatPlayerBlock(player: TeamPlayer): string {
 
 function buildPlayerFields(participant: ParsedParticipant): Array<ReturnType<typeof embedField>> {
   return participant.players.map((player) => {
-    const prefix = player.label === 'Captain' ? '👑 ' : '🎮 ';
+    const prefix = player.label === 'Captain' ? `${CUSTOM_EMOJIS.captain} ` : '🎮 ';
     return embedField(`${prefix}${player.label}`, formatPlayerBlock(player), false);
   });
 }

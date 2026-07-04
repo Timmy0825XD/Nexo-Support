@@ -4,7 +4,11 @@ import {
   type GuildSettingsEdit,
   type GuildSettingsSetup,
 } from '../schemas/guild-settings.js';
-import { STAFF_FIELD_KEYS, type StaffConfigEdit, type StaffConfigSet } from '../schemas/staff-config.js';
+import {
+  STAFF_REQUIRED_FIELD_KEYS,
+  type StaffConfigEdit,
+  type StaffConfigSet,
+} from '../schemas/staff-config.js';
 import type { GuildRow } from '../types/guild.js';
 
 const guildCache = new Map<string, GuildRow>();
@@ -20,7 +24,7 @@ export function isSettingsConfigured(guild: GuildRow | null): boolean {
 
 export function isStaffConfigured(guild: GuildRow | null): boolean {
   if (!guild) return false;
-  return STAFF_FIELD_KEYS.every((key) => guild[key] !== null && guild[key] !== undefined);
+  return STAFF_REQUIRED_FIELD_KEYS.every((key) => guild[key] !== null && guild[key] !== undefined);
 }
 
 export async function getGuildConfig(
@@ -67,7 +71,7 @@ async function ensureGuildRow(supabase: SupabaseClient, guildId: string): Promis
 async function updateGuild(
   supabase: SupabaseClient,
   guildId: string,
-  patch: Record<string, string>,
+  patch: Record<string, string | null>,
 ): Promise<GuildRow> {
   const { data, error } = await supabase
     .from('guilds')
@@ -112,7 +116,11 @@ export async function upsertStaffConfig(
   staff: StaffConfigSet,
 ): Promise<GuildRow> {
   await ensureGuildRow(supabase, guildId);
-  return updateGuild(supabase, guildId, staff);
+  return updateGuild(supabase, guildId, {
+    ...staff,
+    t1_admin_role_id: staff.t1_admin_role_id ?? null,
+    t2_admin_role_id: staff.t2_admin_role_id ?? null,
+  });
 }
 
 export async function patchStaffConfig(

@@ -8,6 +8,7 @@ import type {
   StaffWorkStats,
 } from '../types/attendance.js';
 import { ATTENDANCE_REMARK_DW } from '../types/attendance.js';
+import { CUSTOM_EMOJIS } from '../constants/emojis.js';
 
 export const SALARY_RATES = {
   perEvent: { judge: 450, recorder: 450, dual: 575 },
@@ -228,10 +229,10 @@ export function calculateUserSalary(
 export type WorkDoneCurrency = 'gold' | 'ac';
 
 export function formatWorkDonePayAmount(gold: number, currency: WorkDoneCurrency): string {
-  if (currency === 'gold') return `${gold} 🪙`;
+  if (currency === 'gold') return `${gold} ${CUSTOM_EMOJIS.gold}`;
   const ac = goldToAc(gold);
   const value = Number.isInteger(ac) ? String(ac) : ac.toFixed(1);
-  return `${value} AC`;
+  return `${value} ${CUSTOM_EMOJIS.ac}`;
 }
 
 function resolveUserTag(guild: Guild | undefined, userId: string): string {

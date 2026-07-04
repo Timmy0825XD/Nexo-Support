@@ -1,6 +1,8 @@
 import { SlashCommandBuilder } from 'discord.js';
 import type { SlashCommand } from '../types.js';
+import { CUSTOM_EMOJIS } from '../../constants/emojis.js';
 import { PermissionError, assertOrganiser } from '../../guards/permissions.js';
+import { assertTicketAddPermission } from '../../guards/tournament-permissions.js';
 import { getGuildConfig } from '../../services/guilds.js';
 import {
   logTicketClosed,
@@ -9,8 +11,10 @@ import {
 } from '../../services/guild-logs.js';
 import {
   TicketError,
+  addUserToOpenTicket,
   clearTicketRecords,
   closeTicketChannel,
+  collectPreservedTicketMemberIds,
   findTicketByChannel,
   getTicketChannel,
   reopenTicketChannel,
@@ -21,6 +25,7 @@ import { getMatchById } from '../../services/matches.js';
 import { getTournamentById } from '../../services/tournaments.js';
 import { archiveValidationTranscript } from '../../services/transcripts.js';
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
+import { formatUser } from '../../utils/guild-display.js';
 import { parseValidationTicketTopic } from '../../utils/validation-ticket.js';
 
 export const ticketCommand: SlashCommand = {
@@ -39,6 +44,14 @@ export const ticketCommand: SlashCommand = {
     )
     .addSubcommand((sub) =>
       sub
+        .setName('add')
+        .setDescription('Add a user to the current match ticket with captain permissions')
+        .addUserOption((option) =>
+          option.setName('user').setDescription('User to add to this ticket').setRequired(true),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
         .setName('transcript')
         .setDescription('Archive and delete a role validation support ticket'),
     ),
@@ -54,17 +67,7 @@ export const ticketCommand: SlashCommand = {
     await interaction.deferReply();
 
     const guildConfig = await getGuildConfig(supabase, interaction.guild.id);
-
-    try {
-      assertOrganiser(interaction, guildConfig);
-    } catch (error) {
-      const message =
-        error instanceof PermissionError
-          ? error.message
-          : 'You do not have permission to run this command.';
-      await interaction.editReply({ embeds: [errorEmbed('Permission Denied', message)] });
-      return;
-    }
+    const subcommand = interaction.options.getSubcommand();
 
     const channel = interaction.channel;
     if (!channel?.isTextBased() || channel.isDMBased()) {
@@ -84,10 +87,20 @@ export const ticketCommand: SlashCommand = {
       return;
     }
 
-    const subcommand = interaction.options.getSubcommand();
     const validationTicket = parseValidationTicketTopic(textChannel.topic);
 
     if (subcommand === 'transcript') {
+      try {
+        assertOrganiser(interaction, guildConfig);
+      } catch (error) {
+        const message =
+          error instanceof PermissionError
+            ? error.message
+            : 'You do not have permission to run this command.';
+        await interaction.editReply({ embeds: [errorEmbed('Permission Denied', message)] });
+        return;
+      }
+
       if (!validationTicket) {
         await interaction.editReply({
           embeds: [
@@ -113,7 +126,7 @@ export const ticketCommand: SlashCommand = {
           embeds: [
             successEmbed(
               'Ticket Transcribed',
-              '✅ Transcript archived and the support ticket will be deleted.',
+              `${CUSTOM_EMOJIS.transcript} Transcript archived and the support ticket will be deleted.`,
             ),
           ],
         });
@@ -159,8 +172,6 @@ export const ticketCommand: SlashCommand = {
         return;
       }
 
-      const isClosed = resolveTicketClosedState(textChannel, context.closedCategoryId);
-
       const tournament = await getTournamentById(
         supabase,
         interaction.guild.id,
@@ -181,6 +192,61 @@ export const ticketCommand: SlashCommand = {
         return;
       }
 
+      const isClosed = resolveTicketClosedState(textChannel, context.closedCategoryId);
+
+      if (subcommand === 'add') {
+        try {
+          assertTicketAddPermission(interaction, guildConfig, tournament);
+        } catch (error) {
+          const message =
+            error instanceof PermissionError
+              ? error.message
+              : 'You do not have permission to run this command.';
+          await interaction.editReply({ embeds: [errorEmbed('Permission Denied', message)] });
+          return;
+        }
+
+        if (isClosed) {
+          await interaction.editReply({
+            embeds: [
+              errorEmbed(
+                'Ticket Closed',
+                'Users can only be added while the ticket is open. Reopen the ticket first.',
+              ),
+            ],
+          });
+          return;
+        }
+
+        const targetUser = interaction.options.getUser('user', true);
+        await addUserToOpenTicket({
+          guild: interaction.guild,
+          channel: textChannel,
+          userId: targetUser.id,
+        });
+
+        await interaction.editReply({
+          embeds: [
+            successEmbed(
+              'User Added to Ticket',
+              `${CUSTOM_EMOJIS.captain} ${formatUser(targetUser.id)} now has captain-level access to this ticket.`,
+            ),
+          ],
+        });
+        return;
+      }
+
+      try {
+        assertOrganiser(interaction, guildConfig);
+      } catch (error) {
+        const message =
+          error instanceof PermissionError
+            ? error.message
+            : 'You do not have permission to run this command.';
+        await interaction.editReply({ embeds: [errorEmbed('Permission Denied', message)] });
+        return;
+      }
+
       if (subcommand === 'close') {
         if (isClosed) {
           await interaction.editReply({
@@ -197,7 +263,7 @@ export const ticketCommand: SlashCommand = {
           guildConfig,
         });
         await interaction.editReply({
-          embeds: [successEmbed('Ticket Closed', '✅ Ticket closed successfully.')],
+          embeds: [successEmbed('Ticket Closed', `${CUSTOM_EMOJIS.done} Ticket closed successfully.`)],
         });
 
         if (guildConfig) {
@@ -239,6 +305,8 @@ export const ticketCommand: SlashCommand = {
           tournament,
           match,
         });
+        const preservedMemberIds = collectPreservedTicketMemberIds(textChannel);
+        const mergedMemberIds = [...new Set([...participantMemberIds, ...preservedMemberIds])];
 
         await reopenTicketChannel({
           guild: interaction.guild,
@@ -246,10 +314,10 @@ export const ticketCommand: SlashCommand = {
           openCategoryId: context.openCategoryId,
           tournament,
           guildConfig,
-          participantMemberIds,
+          participantMemberIds: mergedMemberIds,
         });
         await interaction.editReply({
-          embeds: [successEmbed('Ticket Reopened', '✅ Ticket reopened successfully.')],
+          embeds: [successEmbed('Ticket Reopened', `${CUSTOM_EMOJIS.done} Ticket reopened successfully.`)],
         });
 
         if (guildConfig) {
@@ -280,7 +348,7 @@ export const ticketCommand: SlashCommand = {
         }
 
         await interaction.editReply({
-          embeds: [successEmbed('Ticket Deleted', '✅ Ticket deleted successfully.')],
+          embeds: [successEmbed('Ticket Deleted', `${CUSTOM_EMOJIS.done} Ticket deleted successfully.`)],
         });
 
         await textChannel.delete('Match ticket deleted by organiser');

@@ -7,7 +7,8 @@ import {
   type ChatInputCommandInteraction,
   type Guild,
 } from 'discord.js';
-import { CUSTOM_EMOJIS, EMBED_COLORS } from '../constants/emojis.js';
+import { CUSTOM_EMOJIS, EMBED_COLORS, resolveCustomEmoji } from '../constants/emojis.js';
+import { applyPaginationBackButton, applyPaginationNextButton } from './pagination-buttons.js';
 import type { MatchRow } from '../types/match.js';
 import type {
   ScheduleStaffRole,
@@ -242,7 +243,7 @@ export function buildScheduleAssignmentComponents(
     new ButtonBuilder()
       .setCustomId(`${SCHEDULE_ASSIGN_RECORDER_PREFIX}${scheduleId}`)
       .setLabel('Recorder')
-      .setEmoji('🎥')
+      .setEmoji(resolveCustomEmoji('camera'))
       .setStyle(ButtonStyle.Success)
       .setDisabled(locked || hasRecorder),
   );
@@ -251,7 +252,7 @@ export function buildScheduleAssignmentComponents(
 }
 
 export function buildStaffAssignedMessage(userId: string, role: ScheduleStaffRole): string {
-  const emoji = role === 'judge' ? '👨‍⚖️' : '🎥';
+  const emoji = role === 'judge' ? '👨‍⚖️' : CUSTOM_EMOJIS.camera;
   return `${formatUser(userId)} assigned as **${formatStaffRoleLabel(role)}** ${emoji}`;
 }
 
@@ -298,7 +299,7 @@ export function buildScheduleReminderComponents(
       new ButtonBuilder()
         .setCustomId(`${SCHEDULE_CONFIRM_RECORDER_PREFIX}${scheduleId}`)
         .setLabel('Confirmed')
-        .setEmoji('🎥')
+        .setEmoji(resolveCustomEmoji('camera'))
         .setStyle(ButtonStyle.Success)
         .setDisabled(Boolean(recorder.attendance_confirmed_at)),
     );
@@ -511,10 +512,10 @@ function formatUnassignedBlock(
   return [
     `**${schedule.tournament.name}**`,
     formatMatchupTitle(schedule.match.team1_name, schedule.match.team2_name),
-    `🕐 \`${utcLine}\``,
-    `🎫 ${formatChannel(guild, schedule.ticket_channel_id)}`,
-    `📢 ${scheduleLink}`,
-    `⚠️ Missing: **${formatMissingRoles(missingRoles)}**`,
+    `${CUSTOM_EMOJIS.schedule} \`${utcLine}\``,
+    `${CUSTOM_EMOJIS.ticket} ${formatChannel(guild, schedule.ticket_channel_id)}`,
+    `${CUSTOM_EMOJIS.announcement} ${scheduleLink}`,
+    `${CUSTOM_EMOJIS.alert} Missing: **${formatMissingRoles(missingRoles)}**`,
   ].join('\n');
 }
 
@@ -542,7 +543,7 @@ export function buildUnassignedEmbed(
 
   return new EmbedBuilder()
     .setColor(EMBED_COLORS.warning)
-    .setTitle('⚠️ Unassigned Matches Found')
+    .setTitle(`${CUSTOM_EMOJIS.alert} Unassigned Matches Found`)
     .setDescription(
       `Filter: **${filter}**\nStaff assignments are still pending.\n\n${body}`,
     )
@@ -558,16 +559,20 @@ export function buildUnassignedComponents(
   const totalPages = Math.max(1, Math.ceil(totalEntries / UNASSIGNED_PAGE_SIZE));
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(UNASSIGNED_PREV_ID)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel('Previous')
-      .setDisabled(locked || pageIndex <= 0),
-    new ButtonBuilder()
-      .setCustomId(UNASSIGNED_NEXT_ID)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel('Next')
-      .setDisabled(locked || pageIndex >= totalPages - 1),
+    applyPaginationBackButton(
+      new ButtonBuilder()
+        .setCustomId(UNASSIGNED_PREV_ID)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(locked || pageIndex <= 0),
+      'Previous',
+    ),
+    applyPaginationNextButton(
+      new ButtonBuilder()
+        .setCustomId(UNASSIGNED_NEXT_ID)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(locked || pageIndex >= totalPages - 1),
+      'Next',
+    ),
   );
 }
 

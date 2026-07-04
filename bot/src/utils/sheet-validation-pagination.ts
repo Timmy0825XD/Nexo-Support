@@ -8,6 +8,11 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { CUSTOM_EMOJIS, EMBED_COLORS } from '../constants/emojis.js';
+import {
+  applyPaginationBackButton,
+  applyPaginationNextButton,
+  PAGINATION_ICON_LABEL,
+} from './pagination-buttons.js';
 import type { SheetValidationResult } from '../services/sheet-validation.js';
 import {
   ISSUE_SECTIONS,
@@ -46,21 +51,25 @@ export function buildSheetValidationPageComponents(
   const page = pages[pageIndex]!;
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(VALIDATE_PREV_ID)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel('◀')
-      .setDisabled(locked || atStart),
+    applyPaginationBackButton(
+      new ButtonBuilder()
+        .setCustomId(VALIDATE_PREV_ID)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(locked || atStart),
+      PAGINATION_ICON_LABEL,
+    ),
     new ButtonBuilder()
       .setCustomId(VALIDATE_PAGE_ID)
       .setStyle(ButtonStyle.Primary)
       .setLabel(page.buttonLabel)
       .setDisabled(true),
-    new ButtonBuilder()
-      .setCustomId(VALIDATE_NEXT_ID)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel('▶')
-      .setDisabled(locked || atEnd),
+    applyPaginationNextButton(
+      new ButtonBuilder()
+        .setCustomId(VALIDATE_NEXT_ID)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(locked || atEnd),
+      PAGINATION_ICON_LABEL,
+    ),
   );
 }
 

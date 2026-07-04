@@ -23,6 +23,10 @@ import { resolveTournamentFormat } from '../../utils/schedule-captain-display.js
 import { getFullTournamentByName, getTournamentByName } from '../../services/tournaments.js';
 import { buildGetAttendanceEmbed } from '../../utils/attendance-display.js';
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
+import {
+  applyPaginationBackButton,
+  applyPaginationNextButton,
+} from '../../utils/pagination-buttons.js';
 const GET_ATTENDANCE_PAGE_SIZE = 5;
 const GET_ATTENDANCE_PREV = 'get_attendance:prev';
 const GET_ATTENDANCE_NEXT = 'get_attendance:next';
@@ -192,16 +196,20 @@ export const getCommand: SlashCommand = {
       totalPages > 1
         ? [
             new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId(`${GET_ATTENDANCE_PREV}:0:${tournament.id}:${user.id}`)
-                .setLabel('Previous')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(true),
-              new ButtonBuilder()
-                .setCustomId(`${GET_ATTENDANCE_NEXT}:0:${tournament.id}:${user.id}`)
-                .setLabel('Next')
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(totalPages <= 1),
+              applyPaginationBackButton(
+                new ButtonBuilder()
+                  .setCustomId(`${GET_ATTENDANCE_PREV}:0:${tournament.id}:${user.id}`)
+                  .setStyle(ButtonStyle.Secondary)
+                  .setDisabled(true),
+                'Previous',
+              ),
+              applyPaginationNextButton(
+                new ButtonBuilder()
+                  .setCustomId(`${GET_ATTENDANCE_NEXT}:0:${tournament.id}:${user.id}`)
+                  .setStyle(ButtonStyle.Primary)
+                  .setDisabled(totalPages <= 1),
+                'Next',
+              ),
             ),
           ]
         : [];

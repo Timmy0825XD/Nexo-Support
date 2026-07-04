@@ -4,6 +4,7 @@ import { PermissionError, assertOrganiser } from '../../guards/permissions.js';
 import { getGuildConfig } from '../../services/guilds.js';
 import { buildBanlistExcel } from '../../utils/export.js';
 import { embedField, errorEmbed, infoEmbed, successEmbed } from '../../utils/embeds.js';
+import { CUSTOM_EMOJIS } from '../../constants/emojis.js';
 import { formatUser, formatUserFromUser } from '../../utils/guild-display.js';
 import {
   fetchGuildMemberStats,
@@ -49,7 +50,7 @@ export const serverCommand: SlashCommand = {
       const emojiStats = getGuildEmojiStats(guild);
       const boostStats = await getGuildBoostStats(guild);
 
-      const embed = infoEmbed('Server Information', '✅ Server information retrieved successfully.')
+      const embed = infoEmbed('Server Information', `${CUSTOM_EMOJIS.done} Server information retrieved successfully.`)
         .addFields(
           embedField('Name', guild.name, true),
           embedField('ID', guild.id, true),
@@ -124,7 +125,7 @@ export const serverCommand: SlashCommand = {
         const attachment = new AttachmentBuilder(buffer, { name: 'banlist.xlsx' });
         const embed = successEmbed(
           'Ban List Export',
-          `📊 Total banned users: ${rows.length}\n📄 Excel file generated successfully.\n\n✅ Ban list retrieved successfully.\n📄 Excel file generated and uploaded successfully.`,
+          `${CUSTOM_EMOJIS.logs} Total banned users: ${rows.length}\n${CUSTOM_EMOJIS.sheets} Excel file generated successfully.\n\n${CUSTOM_EMOJIS.done} Ban list retrieved successfully.\n${CUSTOM_EMOJIS.sheets} Excel file generated and uploaded successfully.`,
         );
         await interaction.editReply({ embeds: [embed], files: [attachment] });
         return;
@@ -138,7 +139,7 @@ export const serverCommand: SlashCommand = {
 
       const embed = infoEmbed(
         'Banned Users',
-        `📋 Banned users list generated successfully.\n\n✅ Ban list retrieved successfully.`,
+        `${CUSTOM_EMOJIS.details} Banned users list generated successfully.\n\n${CUSTOM_EMOJIS.done} Ban list retrieved successfully.`,
       ).addFields(
         embedField('Total banned users', String(rows.length), false),
         embedField('Users', lines + truncated || 'No banned users.', false),

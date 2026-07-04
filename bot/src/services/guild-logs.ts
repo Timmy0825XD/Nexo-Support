@@ -18,6 +18,7 @@ import {
   formatMember,
   formatRoleFromRole,
   formatRoleList,
+  formatUser,
   formatUserFromUser,
 } from '../utils/guild-display.js';
 import type { TournamentEdit } from '../schemas/tournament.js';
@@ -914,6 +915,75 @@ export async function logRecordingLinkDeleted(params: {
       triggeredByField(params.triggeredBy),
     ],
     color: LOG_COLORS.warning,
+    triggeredBy: params.triggeredBy,
+  });
+}
+
+export async function logUserBanned(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  targetUser: User | null;
+  targetUserId: string;
+  reason: string;
+  durationLabel: string;
+  expiresAt: Date | null;
+}): Promise<void> {
+  const durationValue = params.expiresAt
+    ? `${params.durationLabel} (<t:${Math.floor(params.expiresAt.getTime() / 1000)}:F>)`
+    : params.durationLabel;
+
+  const fields = [
+    { name: 'User', value: formatUser(params.targetUserId), inline: true },
+    {
+      name: 'Player',
+      value: params.targetUser ? `@${params.targetUser.username}` : '*Unknown user*',
+      inline: true,
+    },
+    { name: 'Duration', value: durationValue, inline: true },
+  ];
+
+  if (params.targetUser) {
+    fields.push({
+      name: 'Account Created',
+      value: `<t:${Math.floor(params.targetUser.createdTimestamp / 1000)}:F>`,
+      inline: true,
+    });
+  }
+
+  if (params.reason.trim()) {
+    fields.push({ name: 'Reason', value: params.reason, inline: false });
+  }
+
+  fields.push(triggeredByField(params.triggeredBy));
+
+  const embed = buildBotEventLogEmbed('User Banned', fields, LOG_COLORS.danger, params.triggeredBy);
+
+  if (params.targetUser) {
+    embed.setThumbnail(params.targetUser.displayAvatarURL({ size: 256 }));
+  }
+
+  await sendGuildLog(params.client, params.guild, params.config, 'bot_logs', embed);
+}
+
+export async function logUserUnbanned(params: {
+  client: Client;
+  guild: Guild;
+  config: GuildRow;
+  triggeredBy: User;
+  targetUserId: string;
+}): Promise<void> {
+  await logBotEvent({
+    client: params.client,
+    guild: params.guild,
+    config: params.config,
+    title: 'User Unbanned',
+    fields: [
+      { name: 'User', value: formatUser(params.targetUserId), inline: true },
+      triggeredByField(params.triggeredBy),
+    ],
+    color: LOG_COLORS.bot,
     triggeredBy: params.triggeredBy,
   });
 }

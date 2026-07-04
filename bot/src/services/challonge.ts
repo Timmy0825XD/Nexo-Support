@@ -225,10 +225,85 @@ function buildGroupPlayerMap(
   return map;
 }
 
+function resolveImportantGroupFromIdentifier(identifier: string): string | null {
+  const id = identifier.trim().toUpperCase();
+  if (!id) return null;
+
+  if (
+    id === '3P' ||
+    id.startsWith('3P-') ||
+    id === 'TP' ||
+    id.includes('3RD') ||
+    id.includes('THIRD')
+  ) {
+    return 'Third Place';
+  }
+
+  if (id.startsWith('SF') || id.includes('SEMI')) {
+    return 'Semifinals';
+  }
+
+  if (id === 'GF' || id.includes('GRAND FINAL') || id === 'F') {
+    return 'Grand Finals';
+  }
+
+  return null;
+}
+
+function parsePositiveRound(round: string): number | null {
+  const parsed = Number.parseInt(round, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isBracketRoundGroupLabel(group: string): boolean {
+  const trimmed = group.trim();
+  return /^Round \d+$/i.test(trimmed) || /^Stage 2 · Round \d+$/i.test(trimmed);
+}
+
+function annotateImportantBracketMatches(matches: ChallongeMatchData[]): void {
+  const reservedGroups = new Set(['Grand Finals', 'Semifinals', 'Third Place']);
+  const candidates = matches.filter((match) => {
+    const group = match.group.trim();
+    if (reservedGroups.has(group)) return false;
+    if (/Group [A-Z0-9]/i.test(group)) return false;
+    if (group.startsWith('Winners') || group.startsWith('Losers')) return false;
+    return isBracketRoundGroupLabel(group);
+  });
+
+  if (candidates.length === 0) return;
+
+  const rounds = candidates
+    .map((match) => parsePositiveRound(match.round))
+    .filter((round): round is number => round != null);
+  if (rounds.length === 0) return;
+
+  const maxRound = Math.max(...rounds);
+  const finalMatches = candidates.filter((match) => parsePositiveRound(match.round) === maxRound);
+  const semiMatches = candidates.filter(
+    (match) => parsePositiveRound(match.round) === maxRound - 1,
+  );
+
+  if (finalMatches.length === 1) {
+    finalMatches[0]!.group = 'Grand Finals';
+  }
+
+  if (semiMatches.length === 2) {
+    for (const match of semiMatches) {
+      match.group = 'Semifinals';
+    }
+  }
+}
+
 function resolveGroupLabel(
   match: ChallongeMatch,
   context: ChallongeTournamentContext,
 ): string {
+  const identifier = match.identifier?.trim() ?? '';
+  const importantGroup = resolveImportantGroupFromIdentifier(identifier);
+  if (importantGroup) {
+    return importantGroup;
+  }
+
   const round = match.round ?? 0;
   const groupId = match.group_id;
   const tournamentType = context.tournamentType.toLowerCase();
@@ -245,8 +320,8 @@ function resolveGroupLabel(
   }
 
   if (tournamentType.includes('double elimination')) {
-    const identifier = match.identifier?.trim().toUpperCase() ?? '';
-    if (identifier === 'GF' || identifier.includes('GRAND FINAL')) {
+    const identifierUpper = identifier.toUpperCase();
+    if (identifierUpper === 'GF' || identifierUpper.includes('GRAND FINAL')) {
       return 'Grand Finals';
     }
 
@@ -443,6 +518,7 @@ export async function fetchChallongeMatches(
     .filter((match): match is ChallongeMatchData => match != null);
 
   if (embeddedMatches.length > 0) {
+    annotateImportantBracketMatches(embeddedMatches);
     return embeddedMatches.sort(
       (a, b) => (a.suggestedPlayOrder ?? Number.MAX_SAFE_INTEGER) - (b.suggestedPlayOrder ?? Number.MAX_SAFE_INTEGER),
     );
@@ -456,10 +532,13 @@ export async function fetchChallongeMatches(
   const matchesResponse = await challongeFetch(matchesUrl);
   const matchesPayload = (await matchesResponse.json()) as ChallongeListResponse<ChallongeMatchEntry>;
 
-  return (matchesPayload.matches ?? [])
+  const fetchedMatches = (matchesPayload.matches ?? [])
     .map((entry) => mapMatchEntry(entry, context, participantMap, groupPlayerMap))
-    .filter((match): match is ChallongeMatchData => match != null)
-    .sort(
+    .filter((match): match is ChallongeMatchData => match != null);
+
+  annotateImportantBracketMatches(fetchedMatches);
+
+  return fetchedMatches.sort(
       (a, b) => (a.suggestedPlayOrder ?? Number.MAX_SAFE_INTEGER) - (b.suggestedPlayOrder ?? Number.MAX_SAFE_INTEGER),
     );
 }

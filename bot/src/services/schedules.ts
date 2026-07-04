@@ -47,7 +47,10 @@ import {
   removeScheduledPrefix,
 } from '../utils/schedule-channel-name.js';
 import { generateScheduleThumbnailBuffer } from '../utils/schedule-thumbnail.js';
-import { parseScheduleUtcInstant } from '../utils/schedule-datetime.js';
+import {
+  hasMinimumScheduleLeadTime,
+  parseScheduleUtcInstant,
+} from '../utils/schedule-datetime.js';
 import { applyOpenTicketPermissions } from '../utils/ticket-permissions.js';
 import { resolveCaptainsForMatchTeams } from './sheets.js';
 import { resolveTournamentFormat } from '../utils/schedule-captain-display.js';
@@ -1069,6 +1072,10 @@ export async function createSchedule(params: {
   recorderUserId?: string;
   createdByUserId: string;
 }): Promise<{ schedule: ScheduleRow; thumbnailGenerated: boolean }> {
+  if (!hasMinimumScheduleLeadTime(params.scheduledAt)) {
+    throw new ScheduleError('The schedule time must be at least 10 minutes from now.');
+  }
+
   if (!params.guildConfig?.schedule_channel_id) {
     throw new ScheduleConfigError(
       'No schedule channel is configured. Set one with `/staff config set` or `/staff config edit` before scheduling matches.',
@@ -1411,6 +1418,13 @@ export async function updateSchedule(params: {
   };
 
   if (params.scheduledAt) {
+    const currentScheduledAt = parseScheduleUtcInstant(params.schedule.scheduled_at);
+    if (
+      params.scheduledAt.getTime() !== currentScheduledAt.getTime() &&
+      !hasMinimumScheduleLeadTime(params.scheduledAt)
+    ) {
+      throw new ScheduleError('The schedule time must be at least 10 minutes from now.');
+    }
     updates.scheduled_at = params.scheduledAt.toISOString();
   }
   if (params.note !== undefined) {

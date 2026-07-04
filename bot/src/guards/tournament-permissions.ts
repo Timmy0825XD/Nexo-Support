@@ -122,3 +122,29 @@ export function assertTeamListPermission(
     );
   }
 }
+
+export function canAddTicketMember(
+  member: GuildMember,
+  guildConfig: GuildRow | null,
+  tournament: TournamentRow,
+): boolean {
+  if (isOrganiser(member, guildConfig)) return true;
+  return hasTournamentHelperRole(member, tournament);
+}
+
+export function assertTicketAddPermission(
+  interaction: ChatInputCommandInteraction,
+  guildConfig: GuildRow | null,
+  tournament: TournamentRow,
+): void {
+  if (!interaction.inGuild() || !interaction.member) {
+    throw new PermissionError('This command can only be used inside a server.');
+  }
+
+  const member = interaction.member as GuildMember;
+  if (!canAddTicketMember(member, guildConfig, tournament)) {
+    throw new PermissionError(
+      'You need organiser or tournament helper permissions to add users to tickets.',
+    );
+  }
+}

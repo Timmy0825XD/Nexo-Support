@@ -8,7 +8,12 @@ import {
   type Guild,
   type Message,
 } from 'discord.js';
-import { CUSTOM_EMOJIS, EMBED_COLORS } from '../constants/emojis.js';
+import { CUSTOM_EMOJIS, EMBED_COLORS, resolveCustomEmoji } from '../constants/emojis.js';
+import {
+  applyPaginationBackButton,
+  applyPaginationNextButton,
+  PAGINATION_ICON_LABEL,
+} from './pagination-buttons.js';
 import type { AttendanceWithMatch, StaffWorkEntry } from '../types/attendance.js';
 import { ATTENDANCE_REMARK_DW } from '../types/attendance.js';
 import type { MatchScheduleRow } from '../types/match.js';
@@ -50,6 +55,25 @@ function formatRecordingLinks(links: string[]): string {
   return links.map((url) => `- [Link](${url})`).join('\n');
 }
 
+export function buildEventsRecordingLinksHeader(params: {
+  tournamentName: string;
+  team1Name: string;
+  team2Name: string;
+  team1Score: number;
+  team2Score: number;
+}): string {
+  return [
+    `**Tournament:** ${params.tournamentName}`,
+    `**Match:** ${formatMatchupTitle(params.team1Name, params.team2Name)}`,
+    `**Score:** ${formatInlineScoreLine({
+      team1Name: params.team1Name,
+      team2Name: params.team2Name,
+      score1: params.team1Score,
+      score2: params.team2Score,
+    })}`,
+  ].join('\n');
+}
+
 export function buildEventsRecordingLinksMessage(params: {
   tournamentName: string;
   team1Name: string;
@@ -64,14 +88,7 @@ export function buildEventsRecordingLinksMessage(params: {
       : '*No links submitted*';
 
   return [
-    `**Tournament:** ${params.tournamentName}`,
-    `**Match:** ${formatMatchupTitle(params.team1Name, params.team2Name)}`,
-    `**Score:** ${formatInlineScoreLine({
-      team1Name: params.team1Name,
-      team2Name: params.team2Name,
-      score1: params.team1Score,
-      score2: params.team2Score,
-    })}`,
+    buildEventsRecordingLinksHeader(params),
     '**Links:**',
     linkLines,
   ].join('\n');
@@ -313,8 +330,8 @@ export function buildLinkMissingEmbed(params: {
   expired?: boolean;
 }): EmbedBuilder {
   const title = params.expired
-    ? '⚠️ Missing Recording Links (Expired)'
-    : '⚠️ Missing Recording Links';
+    ? `${CUSTOM_EMOJIS.alert} Missing Recording Links (Expired)`
+    : `${CUSTOM_EMOJIS.alert} Missing Recording Links`;
 
   if (params.rows.length === 0) {
     return new EmbedBuilder()
@@ -328,8 +345,8 @@ export function buildLinkMissingEmbed(params: {
   const start = params.pageIndex * LINK_MISSING_PAGE_SIZE;
   const pageRows = params.rows.slice(start, start + LINK_MISSING_PAGE_SIZE);
   const header = [
-    params.tournamentName ? `📊 **Tournament:** ${params.tournamentName}` : null,
-    `🔗 **Missing Links:** ${params.rows.length} match${params.rows.length === 1 ? '' : 'es'} need attention`,
+    params.tournamentName ? `${CUSTOM_EMOJIS.trophy} **Tournament:** ${params.tournamentName}` : null,
+    `${CUSTOM_EMOJIS.link} **Missing Links:** ${params.rows.length} match${params.rows.length === 1 ? '' : 'es'} need attention`,
     '─────────────',
   ]
     .filter((line): line is string => line != null)
@@ -357,21 +374,25 @@ export function buildLinkMissingComponents(
   const totalPages = Math.max(1, Math.ceil(totalRows / LINK_MISSING_PAGE_SIZE));
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(LINK_MISSING_PREV_ID)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel('«')
-      .setDisabled(locked || pageIndex <= 0),
+    applyPaginationBackButton(
+      new ButtonBuilder()
+        .setCustomId(LINK_MISSING_PREV_ID)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(locked || pageIndex <= 0),
+      PAGINATION_ICON_LABEL,
+    ),
     new ButtonBuilder()
       .setCustomId('link_missing:page')
       .setStyle(ButtonStyle.Secondary)
       .setLabel(`${pageIndex + 1}/${totalPages}`)
       .setDisabled(true),
-    new ButtonBuilder()
-      .setCustomId(LINK_MISSING_NEXT_ID)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel('»')
-      .setDisabled(locked || pageIndex >= totalPages - 1),
+    applyPaginationNextButton(
+      new ButtonBuilder()
+        .setCustomId(LINK_MISSING_NEXT_ID)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(locked || pageIndex >= totalPages - 1),
+      PAGINATION_ICON_LABEL,
+    ),
   );
 }
 
@@ -449,8 +470,8 @@ export function buildWorkDoneEmbed(params: {
     .setColor(0x0066ff)
     .setTitle(`💰 Salary Calculation for ${params.username}`)
     .addFields(
-      { name: '🏆 Tournament', value: params.tournamentName, inline: false },
-      { name: '🏆 Tournament Type', value: params.tournamentTypeLabel, inline: false },
+      { name: `${CUSTOM_EMOJIS.trophy} Tournament`, value: params.tournamentName, inline: false },
+      { name: `${CUSTOM_EMOJIS.trophy} Tournament Type`, value: params.tournamentTypeLabel, inline: false },
       { name: '👨‍⚖️ Judge Salary', value: formatAmount(params.salary.judgeGold), inline: false },
       {
         name: '📼 Recorder Salary',
@@ -465,7 +486,7 @@ export function buildWorkDoneEmbed(params: {
       { name: '💵 Total Salary', value: formatAmount(params.salary.totalGold), inline: false },
     )
     .setFooter({
-      text: '⚠️ Salary is subject to change based on actual work done',
+      text: `${CUSTOM_EMOJIS.alert} Salary is subject to change based on actual work done`,
       iconURL: params.botAvatarUrl ?? undefined,
     })
     .setTimestamp();
@@ -493,13 +514,13 @@ export function buildWorkDoneComponents(
     new ButtonBuilder()
       .setCustomId(`${WORK_DONE_GOLD_PREFIX}${sessionId}`)
       .setLabel('Gold')
-      .setEmoji('🪙')
+      .setEmoji(resolveCustomEmoji('gold'))
       .setStyle(currency === 'gold' ? ButtonStyle.Primary : ButtonStyle.Secondary)
       .setDisabled(locked),
     new ButtonBuilder()
       .setCustomId(`${WORK_DONE_AC_PREFIX}${sessionId}`)
       .setLabel('ArtCoin')
-      .setEmoji('🔷')
+      .setEmoji(resolveCustomEmoji('ac'))
       .setStyle(currency === 'ac' ? ButtonStyle.Primary : ButtonStyle.Secondary)
       .setDisabled(locked),
   );

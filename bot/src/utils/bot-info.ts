@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { SlashCommand } from '../commands/types.js';
+import { CUSTOM_EMOJIS } from '../constants/emojis.js';
 
 const packageDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -10,9 +11,9 @@ export function getBotVersion(): string {
     const pkg = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf-8')) as {
       version?: string;
     };
-    return pkg.version ?? '0.0.0';
+    return pkg.version ?? '1.0.0';
   } catch {
-    return '0.0.0';
+    return '1.0.0';
   }
 }
 
@@ -39,9 +40,9 @@ interface HelpCategoryDefinition {
 
 const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
   {
-    title: '🤖 Bot Commands',
+    title: `${CUSTOM_EMOJIS.bot_icone} Bot Commands`,
     subtitle: 'Bot information and utility commands',
-    buttonLabel: '🤖 Bot',
+    buttonLabel: `${CUSTOM_EMOJIS.bot_icone} Bot`,
     commandNames: ['ping', 'bot'],
     entries: [
       { name: '/ping', description: 'Check bot latency and database connection status.' },
@@ -50,9 +51,9 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
-    title: '⚙️ Settings Commands',
+    title: `${CUSTOM_EMOJIS.settings} Settings Commands`,
     subtitle: 'Guild configuration and logging settings',
-    buttonLabel: '⚙️ Settings',
+    buttonLabel: `${CUSTOM_EMOJIS.settings} Settings`,
     commandNames: ['settings'],
     entries: [
       {
@@ -69,9 +70,9 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
-    title: '👨‍💼 Staff Commands',
+    title: `${CUSTOM_EMOJIS.medal} Staff Commands`,
     subtitle: 'Staff roles, recruitment, and work statistics',
-    buttonLabel: '👨‍💼 Staff',
+    buttonLabel: `${CUSTOM_EMOJIS.medal} Staff`,
     commandNames: ['staff'],
     entries: [
       {
@@ -99,9 +100,9 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
-    title: '🏆 Tournament Commands',
+    title: `${CUSTOM_EMOJIS.trophy} Tournament Commands`,
     subtitle: 'Tournament configuration and registration',
-    buttonLabel: '🏆 Tournament',
+    buttonLabel: `${CUSTOM_EMOJIS.trophy} Tournament`,
     commandNames: ['tournament'],
     entries: [
       {
@@ -132,9 +133,9 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
-    title: '👥 Team Commands',
+    title: `${CUSTOM_EMOJIS.team_member} Team Commands`,
     subtitle: 'Tournament participant lookup and registration viewer',
-    buttonLabel: '👥 Team',
+    buttonLabel: `${CUSTOM_EMOJIS.team_member} Team`,
     commandNames: ['team'],
     entries: [
       {
@@ -150,9 +151,9 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
-    title: '📄 Sheet Commands',
+    title: `${CUSTOM_EMOJIS.sheets} Sheet Commands`,
     subtitle: 'Google Sheet templates for tournament registration',
-    buttonLabel: '📄 Sheet',
+    buttonLabel: `${CUSTOM_EMOJIS.sheets} Sheet`,
     commandNames: ['sheet'],
     entries: [
       {
@@ -174,10 +175,10 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
-    title: '🚪 Room Commands',
-    subtitle: 'Manual match room creation and queue inspection',
-    buttonLabel: '🚪 Room',
-    commandNames: ['room'],
+    title: `${CUSTOM_EMOJIS.ticket} Room Commands`,
+    subtitle: 'Manual and automatic match room creation',
+    buttonLabel: `${CUSTOM_EMOJIS.ticket} Room`,
+    commandNames: ['room', 'auto_room'],
     entries: [
       {
         name: '/room create',
@@ -189,14 +190,6 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
         description: 'Show open matches available for room creation.',
         permission: 'Organiser or Staff',
       },
-    ],
-  },
-  {
-    title: '⚡ Auto Room Commands',
-    subtitle: 'Automatic tournament room creation controls',
-    buttonLabel: '⚡ Auto Room',
-    commandNames: ['auto_room'],
-    entries: [
       {
         name: '/auto_room run',
         description: 'Manually trigger automatic room creation.',
@@ -215,27 +208,9 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
-    title: '📊 Score Commands',
-    subtitle: 'Upload and correct tournament match results',
-    buttonLabel: '📊 Scores',
-    commandNames: ['upload_score', 'correct_bracket'],
-    entries: [
-      {
-        name: '/upload_score',
-        description: 'Upload scores from the current match ticket to Challonge and finalize it.',
-        permission: 'Admin or Organiser (ticket channel only)',
-      },
-      {
-        name: '/correct_bracket',
-        description: 'Correct incorrect scores on the Challonge bracket.',
-        permission: 'Organiser only',
-      },
-    ],
-  },
-  {
-    title: '👥 Role Commands',
+    title: `${CUSTOM_EMOJIS.role} Role Commands`,
     subtitle: 'Role assignment and member management',
-    buttonLabel: '👥 Role',
+    buttonLabel: `${CUSTOM_EMOJIS.role} Role`,
     commandNames: ['role'],
     entries: [
       { name: '/role user', description: 'Add or remove a role from a user.', permission: 'Organiser only' },
@@ -257,10 +232,64 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
     ],
   },
   {
-    title: '🌐 Server Commands',
+    title: `${CUSTOM_EMOJIS.utility} Utility Commands`,
+    subtitle: 'Administrative server maintenance tools',
+    buttonLabel: `${CUSTOM_EMOJIS.utility} Utility`,
+    commandNames: ['utility'],
+    entries: [
+      {
+        name: '/utility clear_category',
+        description: 'Delete all channels under a category, leaving it empty (confirmation required).',
+        permission: 'Administrator only',
+      },
+      {
+        name: '/utility clear',
+        description: 'Delete messages in the current channel by count or age.',
+        permission: 'Manage Messages',
+      },
+      {
+        name: '/utility emoji_steal',
+        description: 'Remove a custom emoji by ID and show its image.',
+        permission: 'Manage Emojis and Stickers',
+      },
+      {
+        name: '/utility random',
+        description: 'Pick random option(s) from a comma-separated list.',
+      },
+      {
+        name: '/utility utc',
+        description: 'Show a UTC date/time with local Discord timestamps.',
+      },
+      {
+        name: '/utility avatar',
+        description: 'Display a user avatar at full size.',
+      },
+      {
+        name: '/utility toss',
+        description: 'Flip a coin — heads or tails.',
+      },
+      {
+        name: '/utility enlarge',
+        description: 'Enlarge a Unicode or custom emoji.',
+      },
+      {
+        name: '/utility embed',
+        description:
+          'Interactive embed builder with ephemeral preview, modals, and required target channel.',
+        permission: 'Manage Messages',
+      },
+      {
+        name: '/utility edit_embed',
+        description: 'Edit a bot embed message interactively using its Discord message ID.',
+        permission: 'Manage Messages',
+      },
+    ],
+  },
+  {
+    title: `${CUSTOM_EMOJIS.servers} Server Commands`,
     subtitle: 'Server statistics and moderation tools',
-    buttonLabel: '🌐 Server',
-    commandNames: ['server'],
+    buttonLabel: `${CUSTOM_EMOJIS.servers} Server`,
+    commandNames: ['server', 'user'],
     entries: [
       { name: '/server info', description: 'View detailed server statistics.' },
       {
@@ -268,13 +297,24 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
         description: 'View all banned users or export them to Excel.',
         permission: 'Organiser only',
       },
+      {
+        name: '/user ban',
+        description:
+          'Ban a user by Discord ID (7 days, 1/2/6 months, or permanent) with reason.',
+        permission: 'Organiser only',
+      },
+      {
+        name: '/user unban',
+        description: 'Remove a ban by Discord ID.',
+        permission: 'Organiser only',
+      },
     ],
   },
   {
-    title: '📅 Schedule Commands',
+    title: `${CUSTOM_EMOJIS.schedule} Schedule Commands`,
     subtitle: 'Match scheduling and staff assignment',
-    buttonLabel: '📅 Schedule',
-    commandNames: ['schedule'],
+    buttonLabel: `${CUSTOM_EMOJIS.schedule} Schedule`,
+    commandNames: ['schedule', 'upload_score', 'correct_bracket'],
     entries: [
       {
         name: '/schedule create',
@@ -321,17 +361,32 @@ const HELP_CATEGORY_DEFINITIONS: HelpCategoryDefinition[] = [
         description: 'Delete the declared result embed from the tournament results channel.',
         permission: 'Tournament organizer or helper (ticket channel only)',
       },
+      {
+        name: '/upload_score',
+        description: 'Upload scores from the current match ticket to Challonge and finalize it.',
+        permission: 'Admin or Organiser (ticket channel only)',
+      },
+      {
+        name: '/correct_bracket',
+        description: 'Correct incorrect scores on the Challonge bracket.',
+        permission: 'Organiser only',
+      },
     ],
   },
   {
-    title: '🎫 Ticket Commands',
+    title: `${CUSTOM_EMOJIS.ticket} Ticket Commands`,
     subtitle: 'Match ticket lifecycle management',
-    buttonLabel: '🎫 Ticket',
+    buttonLabel: `${CUSTOM_EMOJIS.ticket} Ticket`,
     commandNames: ['ticket'],
     entries: [
       { name: '/ticket close', description: 'Close a match ticket.', permission: 'Organiser only' },
       { name: '/ticket reopen', description: 'Reopen a closed match ticket.', permission: 'Organiser only' },
       { name: '/ticket delete', description: 'Delete a match ticket.', permission: 'Organiser only' },
+      {
+        name: '/ticket add',
+        description: 'Add a user to the ticket with captain permissions.',
+        permission: 'Organiser or tournament helper (match ticket only)',
+      },
       {
         name: '/ticket transcript',
         description: 'Archive and delete a role validation support ticket.',
@@ -391,6 +446,6 @@ export function formatHelpEntry(entry: HelpEntry, commandIds?: Map<string, strin
   const root = entry.name.split(' ')[0]!.slice(1);
   const commandId = commandIds?.get(root);
   const label = commandId ? `</${entry.name.slice(1)}:${commandId}>` : `**${entry.name}**`;
-  const permission = entry.permission ? `\n⚠️ ${entry.permission}` : '';
+  const permission = entry.permission ? `\n${CUSTOM_EMOJIS.warn_perm} ${entry.permission}` : '';
   return `${label}\n${entry.description}${permission}`;
 }

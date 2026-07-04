@@ -190,15 +190,6 @@ export const attendanceCommand: SlashCommand = {
           initialLinks: parsed.link,
         });
 
-        await interaction.editReply({
-          embeds: [
-            successEmbed(
-              'Attendance Marked Successfully',
-              'The attendance record was created and posted to this ticket and the tournament attendance channel.',
-            ),
-          ],
-        });
-
         if (guildConfig) {
           void logAttendanceMarked({
             client: interaction.client,
@@ -211,6 +202,8 @@ export const attendanceCommand: SlashCommand = {
             attendanceId: attendance.id,
           });
         }
+
+        await interaction.deleteReply().catch(() => undefined);
         return;
       }
 
