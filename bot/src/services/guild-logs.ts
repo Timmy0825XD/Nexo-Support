@@ -25,12 +25,18 @@ import type { TournamentEdit } from '../schemas/tournament.js';
 import type { TournamentRow } from '../types/tournament.js';
 import type { StaffRoleChangeResult } from './staff-hr.js';
 import type { BulkRoleResult } from './roles.js';
+import { sendLogWebhook, type LogWebhookPersona } from './log-webhooks.js';
 
 export type GuildLogTarget = 'bot_logs' | 'challonge_logs';
 
 const LOG_CHANNEL_KEYS: Record<GuildLogTarget, keyof GuildRow> = {
   bot_logs: 'bot_logs_channel_id',
   challonge_logs: 'challonge_logs_channel_id',
+};
+
+const DEFAULT_PERSONA: Record<GuildLogTarget, LogWebhookPersona> = {
+  bot_logs: 'bot_logs',
+  challonge_logs: 'challonge_logs',
 };
 
 /**
@@ -43,6 +49,7 @@ export async function sendGuildLog(
   config: GuildRow,
   target: GuildLogTarget,
   embed: EmbedBuilder,
+  persona: LogWebhookPersona = DEFAULT_PERSONA[target],
 ): Promise<boolean> {
   const channelId = config[LOG_CHANNEL_KEYS[target]];
   if (!channelId) {
@@ -51,14 +58,12 @@ export async function sendGuildLog(
   }
 
   try {
-    const channel = await client.channels.fetch(channelId);
-    if (!channel?.isTextBased() || channel.isDMBased()) {
-      console.warn(`[guild-logs] Channel ${channelId} is not a guild text channel`);
-      return false;
-    }
-
-    await channel.send({ embeds: [embed] });
-    return true;
+    return await sendLogWebhook({
+      client,
+      channelId,
+      persona,
+      embeds: [embed],
+    });
   } catch (error) {
     console.error(`[guild-logs] Failed to send ${target} log in guild ${guild.id}:`, error);
     return false;
@@ -104,8 +109,16 @@ export async function logChallongeEvent(params: {
   guild: Guild;
   config: GuildRow;
   embed: EmbedBuilder;
+  persona?: LogWebhookPersona;
 }): Promise<void> {
-  await sendGuildLog(params.client, params.guild, params.config, 'challonge_logs', params.embed);
+  await sendGuildLog(
+    params.client,
+    params.guild,
+    params.config,
+    'challonge_logs',
+    params.embed,
+    params.persona ?? 'challonge_logs',
+  );
 }
 
 export async function logBotEvent(params: {
@@ -116,6 +129,7 @@ export async function logBotEvent(params: {
   fields: Array<{ name: string; value: string; inline?: boolean }>;
   color?: number;
   triggeredBy: User;
+  persona?: LogWebhookPersona;
 }): Promise<void> {
   const embed = buildBotEventLogEmbed(
     params.title,
@@ -123,7 +137,14 @@ export async function logBotEvent(params: {
     params.color,
     params.triggeredBy,
   );
-  await sendGuildLog(params.client, params.guild, params.config, 'bot_logs', embed);
+  await sendGuildLog(
+    params.client,
+    params.guild,
+    params.config,
+    'bot_logs',
+    embed,
+    params.persona ?? 'bot_logs',
+  );
 }
 
 function triggeredByField(user: User) {
@@ -263,6 +284,7 @@ export async function logTicketClosed(params: {
     ],
     color: LOG_COLORS.warning,
     triggeredBy: params.triggeredBy,
+    persona: 'ticket_system',
   });
 }
 
@@ -286,6 +308,7 @@ export async function logTicketReopened(params: {
     ],
     color: LOG_COLORS.config,
     triggeredBy: params.triggeredBy,
+    persona: 'ticket_system',
   });
 }
 
@@ -309,6 +332,7 @@ export async function logTicketDeleted(params: {
     ],
     color: LOG_COLORS.danger,
     triggeredBy: params.triggeredBy,
+    persona: 'ticket_system',
   });
 }
 
@@ -497,6 +521,7 @@ export async function logScoreUploaded(params: {
       winnerName,
       triggeredBy: params.triggeredBy,
     }),
+    persona: 'score_upload',
   });
 }
 
@@ -536,6 +561,7 @@ export async function logBracketCorrected(params: {
       winnerName,
       triggeredBy: params.triggeredBy,
     }),
+    persona: 'score_upload',
   });
 }
 
