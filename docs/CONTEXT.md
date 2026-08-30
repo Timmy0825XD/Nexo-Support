@@ -15,7 +15,7 @@ Arquitectura simplificada: **un bot que accede directo a Supabase** vía `@supab
 |---|---|
 | Bot → NestJS API → Prisma → DB | Bot → supabase-js → Supabase PostgreSQL |
 | Registro web personalizado | Google Sheets (`sheet_link` en torneo) |
-| Monorepo con múltiples apps | Bun + `bot/` |
+| Monorepo con múltiples apps | Node.js + npm + `bot/` |
 | Prisma en runtime (API) | Prisma solo para migraciones; supabase-js en runtime |
 
 ---

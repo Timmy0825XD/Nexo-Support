@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "DISCORD_SKIP_COMMAND_SYNC=1 bun run --watch src/index.ts",
-    "start": "bun run src/index.ts",
+    "dev": "DISCORD_SKIP_COMMAND_SYNC=1 node --watch --import tsx src/index.ts",
+    "start": "node --import tsx src/index.ts",
     "build": "tsc",
     "lint": "tsc --noEmit",
-    "commands:sync": "bun run src/scripts/sync-commands.ts",
-    "commands:clear": "bun run src/scripts/sync-commands.ts --clear",
+    "commands:sync": "node --import tsx src/scripts/sync-commands.ts",
+    "commands:clear": "node --import tsx src/scripts/sync-commands.ts --clear",
     "db:migrate": "prisma migrate deploy --schema ../prisma/schema.prisma",
     "db:push": "prisma db push --schema ../prisma/schema.prisma --skip-generate",
     "db:generate": "prisma generate --schema ../prisma/schema.prisma"
@@ -24,8 +27,9 @@
     "exceljs": "^4.4.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "tsx": "^4.20.5",
     "zod": "^3.25.67"
-},
+  },
   "devDependencies": {
     "@types/node": "^22.15.32",
     "prisma": "^6.9.0",

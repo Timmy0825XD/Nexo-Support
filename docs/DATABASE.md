@@ -376,8 +376,8 @@ Schema Prisma: [`../prisma/schema.prisma`](../prisma/schema.prisma).
 ```bash
 cd bot
 cp ../prisma/.env.example ../prisma/.env   # configurar DATABASE_URL + DIRECT_URL
-bun run db:push      # desarrollo
-bun run db:migrate   # producción
+npm run db:push      # desarrollo
+npm run db:migrate   # producción
 ```
 
 **Migraciones recientes:**
