@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "DISCORD_SKIP_COMMAND_SYNC=1 bun run --watch src/index.ts",
-    "start": "bun run src/index.ts",
+    "dev": "DISCORD_SKIP_COMMAND_SYNC=1 node --watch --import tsx src/index.ts",
+    "start": "node dist/index.js",
     "build": "tsc",
     "lint": "tsc --noEmit",
-    "commands:sync": "bun run src/scripts/sync-commands.ts",
-    "commands:clear": "bun run src/scripts/sync-commands.ts --clear",
+    "commands:sync": "node --import tsx src/scripts/sync-commands.ts",
+    "commands:clear": "node --import tsx src/scripts/sync-commands.ts --clear",
     "db:migrate": "prisma migrate deploy --schema ../prisma/schema.prisma",
     "db:push": "prisma db push --schema ../prisma/schema.prisma --skip-generate",
     "db:generate": "prisma generate --schema ../prisma/schema.prisma"
@@ -20,15 +23,23 @@
     "@supabase/supabase-js": "^2.49.8",
     "discord-html-transcripts": "^3.3.0",
     "discord.js": "^14.21.0",
+    "debug": "^4.4.1",
     "dotenv": "^16.5.0",
     "exceljs": "^4.4.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.8.3",
     "zod": "^3.25.67"
-},
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas-linux-arm64-gnu": "1.0.0",
+    "@napi-rs/canvas-linux-arm64-musl": "1.0.0",
+    "@napi-rs/canvas-linux-x64-gnu": "1.0.0",
+    "@napi-rs/canvas-linux-x64-musl": "1.0.0"
+  },
   "devDependencies": {
     "@types/node": "^22.15.32",
-    "prisma": "^6.9.0",
-    "typescript": "^5.8.3"
+    "prisma": "^6.9.0"
   }
 }

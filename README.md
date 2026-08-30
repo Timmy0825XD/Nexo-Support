@@ -11,7 +11,7 @@ Bot monolítico de Discord para gestionar torneos competitivos de **Modern Warsh
 | Herramienta | Versión |
 |---|---|
 | [Node.js](https://nodejs.org/) | 20 LTS+ |
-| [Bun](https://bun.sh) | Latest |
+| [npm](https://www.npmjs.com/) | Incluido con Node 20+ |
 | [Supabase](https://supabase.com/) | Proyecto con PostgreSQL |
 | [Discord Developer](https://discord.com/developers/applications) | Bot token + Application ID |
 | Google Cloud | Service account con acceso a Sheets (fase participantes) |
@@ -20,9 +20,10 @@ Bot monolítico de Discord para gestionar torneos competitivos de **Modern Warsh
 
 ## Instalación
 
+Desde la raíz del repositorio:
+
 ```bash
-cd bot
-bun install
+npm install
 ```
 
 ---
@@ -32,7 +33,7 @@ bun install
 ### 1. Variables del bot
 
 ```bash
-cp .env.example .env
+cp bot/.env.example bot/.env
 ```
 
 | Variable | Descripción |
@@ -48,7 +49,7 @@ cp .env.example .env
 ### 2. Variables de Prisma (migraciones)
 
 ```bash
-cp ../prisma/.env.example ../prisma/.env
+cp prisma/.env.example prisma/.env
 ```
 
 En Supabase → **Settings → Database → Connection string**:
@@ -60,12 +61,12 @@ En Supabase → **Settings → Database → Connection string**:
 
 ### 3. Base de datos — primera vez
 
-Desde `bot/`:
+Desde la raíz:
 
 ```bash
-bun run db:push      # desarrollo — schema completo
+npm run db:push      # desarrollo — schema completo
 # o, con migraciones versionadas:
-bun run db:migrate   # producción — incluye UNIQUE en match_rooms.match_id
+npm run db:migrate   # producción — incluye UNIQUE en match_rooms.match_id
 ```
 
 Schema y tablas: [`docs/DATABASE.md`](./docs/DATABASE.md).
@@ -75,11 +76,37 @@ Schema y tablas: [`docs/DATABASE.md`](./docs/DATABASE.md).
 ## Desarrollo
 
 ```bash
-cd bot
-bun run dev
+npm run dev
 ```
 
 El bot registra slash commands en `DISCORD_GUILD_ID` si está definido. Comando de prueba: `/ping` (latencia + conexión Supabase).
+
+---
+
+## Despliegue (Wispbyte)
+
+1. Imagen Docker: **Node.js** (20+).
+2. Sube el repositorio completo (raíz con `package.json` e `index.js`). No subas `node_modules` ni `.env`.
+3. En **Startup**: comando `npm start` (o `node index.js`).
+4. Pega las variables de entorno en el panel (las mismas de `bot/.env.example`).
+5. Arranca el servidor: el panel ejecuta `npm install` y luego el comando de inicio.
+
+Migraciones de base de datos (una vez, con `DATABASE_URL` / `DIRECT_URL`): `npm run db:migrate`.
+
+---
+
+## Despliegue (Hidden Cloud / Pterodactyl)
+
+El egg de este host **no clona GitHub al reinstalar**: solo deja `startup.js`. El clone lo hace ese archivo al arrancar.
+
+1. Imagen: **Nodejs 20+** (23 sirve).
+2. **Main file:** `startup.js` (no `index.js`).
+3. **User uploaded files:** da igual; deja el `startup.js` que crea el egg o pega el de este repo.
+4. **Git repo address:** `https://github.com/Timmy0825XD/Nexo-Support.git`
+5. **Install branch:** `chore/npm-start-wispbyte` (hasta mergear a `develop`).
+6. **Auto update:** ON
+7. Start. El bootstrap clona en `nexo-support/`, corre `npm install` y arranca el bot.
+8. En Files crea `nexo-support/bot/.env` con las variables de `bot/.env.example`. Reinicia.
 
 ---
 
@@ -87,13 +114,13 @@ El bot registra slash commands en `DISCORD_GUILD_ID` si está definido. Comando 
 
 | Comando | Descripción |
 |---|---|
-| `bun run dev` | Bot con watch |
-| `bun run start` | Bot sin watch |
-| `bun run build` | Compilar TypeScript |
-| `bun run lint` | `tsc --noEmit` |
-| `bun run db:push` | Sincronizar schema con Supabase (dev) |
-| `bun run db:migrate` | Aplicar migraciones (prod) |
-| `bun run db:generate` | Generar Prisma client (opcional — bot no lo usa en runtime) |
+| `npm run dev` | Bot con watch |
+| `npm start` | Bot en producción (Node + TypeScript) |
+| `npm run build` | Compilar TypeScript |
+| `npm run lint` | `tsc --noEmit` |
+| `npm run db:push` | Sincronizar schema con Supabase (dev) |
+| `npm run db:migrate` | Aplicar migraciones (prod) |
+| `npm run db:generate` | Generar Prisma client (opcional — bot no lo usa en runtime) |
 
 ---
 

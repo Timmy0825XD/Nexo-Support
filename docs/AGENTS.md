@@ -22,7 +22,7 @@ Para contexto funcional, consultar [`CONTEXT.md`](./CONTEXT.md). Para schema DB,
 
 | Área | Stack |
 |---|---|
-| Runtime / PM | **Bun** (`bun install`, `bun run dev`) |
+| Runtime / PM | **Node.js 20+** (`npm install`, `npm start`) |
 | Lenguaje | TypeScript strict |
 | Bot | discord.js v14 |
 | DB runtime | `@supabase/supabase-js` |
@@ -249,7 +249,7 @@ Ver [`GITFLOW.md`](./GITFLOW.md). Ramas de trabajo: `feature/<descripcion>`.
 ### Base de datos
 
 - [ ] Schema Prisma alineado con `DATABASE.md`
-- [ ] Migración aplicable con `bun run db:push` o `db:migrate`
+- [ ] Migración aplicable con `npm run db:push` o `db:migrate`
 
 ---
 
@@ -265,4 +265,4 @@ Ver [`GITFLOW.md`](./GITFLOW.md). Ramas de trabajo: `feature/<descripcion>`.
 | [`DATABASE.md`](./DATABASE.md) | Tablas Supabase y RLS |
 | [`EMOJIS.md`](./EMOJIS.md) | Emojis del bot |
 | [`GITFLOW.md`](./GITFLOW.md) | Git Flow |
-| [`../README.md`](../README.md) | Instalación Bun y deploy |
+| [`../README.md`](../README.md) | Instalación npm y deploy (Wispbyte) |
