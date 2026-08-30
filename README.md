@@ -95,6 +95,21 @@ Migraciones de base de datos (una vez, con `DATABASE_URL` / `DIRECT_URL`): `npm 
 
 ---
 
+## Despliegue (Hidden Cloud / Pterodactyl)
+
+El egg de este host **no clona GitHub al reinstalar**: solo deja `startup.js`. El clone lo hace ese archivo al arrancar.
+
+1. Imagen: **Nodejs 20+** (23 sirve).
+2. **Main file:** `startup.js` (no `index.js`).
+3. **User uploaded files:** da igual; deja el `startup.js` que crea el egg o pega el de este repo.
+4. **Git repo address:** `https://github.com/Timmy0825XD/Nexo-Support.git`
+5. **Install branch:** `chore/npm-start-wispbyte` (hasta mergear a `develop`).
+6. **Auto update:** ON
+7. Start. El bootstrap clona en `nexo-support/`, corre `npm install` y arranca el bot.
+8. En Files crea `nexo-support/bot/.env` con las variables de `bot/.env.example`. Reinicia.
+
+---
+
 ## Scripts
 
 | Comando | Descripción |
