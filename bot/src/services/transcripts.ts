@@ -6,6 +6,7 @@ import {
 } from 'discord.js';
 import type { GuildRow } from '../types/guild.js';
 import type { TournamentRow } from '../types/tournament.js';
+import { sendLogWebhook } from './log-webhooks.js';
 
 function buildTranscriptFilename(matchLabel: string): string {
   const safeName = matchLabel
@@ -21,16 +22,16 @@ async function sendTranscriptAttachment(
   attachment: AttachmentBuilder,
   content: string,
 ): Promise<void> {
-  const channel = await guild.channels.fetch(channelId);
-  if (!channel?.isTextBased() || channel.isDMBased()) {
-    console.warn(`[transcripts] Channel ${channelId} is not a guild text channel.`);
-    return;
-  }
-
-  await channel.send({
+  const sent = await sendLogWebhook({
+    client: guild.client,
+    channelId,
+    persona: 'transcripts',
     content,
     files: [attachment],
   });
+  if (!sent) {
+    console.warn(`[transcripts] Failed to send transcript to ${channelId}`);
+  }
 }
 
 export async function archiveTranscript(params: {

@@ -10,10 +10,15 @@ Commands that **mutate server state** must write an audit log after a successful
 
 ## Log channels (from `/settings setup`)
 
-| Target | Config key | Use for |
-|---|---|---|
-| `bot_logs` | `bot_logs_channel_id` | Roles, staff, tickets, permissions, general bot actions |
-| `challonge_logs` | `challonge_logs_channel_id` | Bracket/score/Challonge operations |
+| Target | Config key | Webhook name | Use for |
+|---|---|---|---|
+| `bot_logs` | `bot_logs_channel_id` | **Bot Logs** | Roles, staff, rooms, permissions, general bot actions |
+| `bot_logs` | same channel | **Ticket System** | Ticket close / reopen / delete |
+| `challonge_logs` | `challonge_logs_channel_id` | **Challonge Logs** | Bracket link / Challonge config |
+| `challonge_logs` | same channel | **Score Upload** | Score report and bracket score corrections |
+| transcript | `transcript_logs_channel_id` | **Transcripts** | HTML transcript archives |
+
+Logs are sent via a channel webhook (username override). The bot needs **Manage Webhooks** in those channels. If webhook creation fails, it falls back to a normal `channel.send` as the bot user.
 
 Use helpers in `bot/src/services/guild-logs.ts`. Never throw from logging — failures are console-only.
 
