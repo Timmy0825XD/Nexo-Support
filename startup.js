@@ -7,7 +7,7 @@ const path = require('node:path');
 const ROOT = process.cwd();
 const APP_DIR = path.join(ROOT, 'nexo-support');
 const DEFAULT_REPO = 'https://github.com/Timmy0825XD/Nexo-Support.git';
-const DEFAULT_BRANCH = 'chore/npm-start-wispbyte';
+const DEFAULT_BRANCH = 'develop';
 
 function env(name, fallback = '') {
   const value = process.env[name];
@@ -50,7 +50,7 @@ function branchName() {
 }
 
 function hasApp() {
-  return fs.existsSync(path.join(APP_DIR, 'index.js')) && fs.existsSync(path.join(APP_DIR, 'bot'));
+  return fs.existsSync(path.join(APP_DIR, 'bot', 'package.json'));
 }
 
 function canvasNativePackage() {
@@ -115,14 +115,18 @@ function cloneOrUpdate() {
       fs.rmSync(APP_DIR, { recursive: true, force: true });
     }
     console.log(`Cloning ${repo} (${branch})...`);
-    run('git', ['clone', '--depth', '1', '--branch', branch, repo, APP_DIR], ROOT);
+    run('git', ['clone', '--depth', '1', '--no-single-branch', '--branch', branch, repo, APP_DIR], ROOT);
     return;
   }
 
   if (autoUpdate) {
     console.log(`Updating ${branch}...`);
-    run('git', ['fetch', 'origin', branch], APP_DIR);
-    run('git', ['reset', '--hard', `origin/${branch}`], APP_DIR);
+    run(
+      'git',
+      ['fetch', '--depth', '1', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
+      APP_DIR,
+    );
+    run('git', ['checkout', '-B', branch, `origin/${branch}`], APP_DIR);
   }
 }
 
